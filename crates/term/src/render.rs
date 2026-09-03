@@ -631,8 +631,9 @@ impl GridRenderer {
     /// it bends with the curvature and glows with the phosphor instead of
     /// floating flat above them.
     ///
-    /// One cell per `char`, which is the same ruler the grid itself uses (the
-    /// cell path has no width table either), and clipped at the last column.
+    /// One cell per `char` under the fixed grid, the same ruler the grid
+    /// itself uses; under [`crate::proportional`] it is each character's own
+    /// advance, again the grid's own ruler. Clipped at the last column.
     /// Empty text takes the composition off the screen, which is what a commit
     /// and an abandoned composition both send.
     pub fn set_preedit(&mut self, queue: &wgpu::Queue, text: &str) {

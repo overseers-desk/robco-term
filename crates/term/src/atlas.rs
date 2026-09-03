@@ -668,7 +668,7 @@ impl FontContext {
     }
 
     /// One character's advance at a given raster size, shaped through
-    /// whichever face covers it. `None` for a codepoint nothing covers.
+    /// whichever face covers it. `0.0` for a codepoint nothing covers.
     pub fn advance(&mut self, c: char, px: f32) -> f32 {
         let mut buf = [0u8; 4];
         self.covering_glyphs(c.encode_utf8(&mut buf), px)
@@ -690,7 +690,8 @@ impl FontContext {
         // lower case and about the width of the average letter, and adds a
         // fifth for the lines that run long. A line of capitals overruns the
         // fifth and hangs off the right; that is the trade this is here to
-        // show.
+        // show. The fifth is the width to try first and nothing has measured
+        // it, so it is where a reader who dislikes the margin should start.
         let measured = if crate::proportional() { "x" } else { "M" };
         let advance = self
             .covering_glyphs(measured, px)
