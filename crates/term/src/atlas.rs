@@ -247,6 +247,13 @@ pub struct GlyphSlot {
     pub top: i32,
 }
 
+/// A shaped advance as whole raster pixels, floored at one so no character
+/// leaves the pen where it found it. The rounding is the same concession the
+/// cell makes: there is no pixel-exact rendering of a 6.4-pixel step.
+fn round_advance(w: f32) -> u32 {
+    (w.round().max(1.0)) as u32
+}
+
 /// Integer cell metrics, in unscaled raster pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CellMetrics {
@@ -275,6 +282,13 @@ pub struct GlyphAtlas {
     /// draws is whatever that allocation happened to hold.
     pub generation: u64,
     slots: HashMap<char, GlyphSlot>,
+    /// What each character advances the pen by, in unscaled raster pixels:
+    /// the shaped advance of the face that covers it, which is the one
+    /// measure a glyph's bitmap cannot supply (a space has an advance and no
+    /// ink, and a comma has far more ink than advance). Filled beside the
+    /// slot table, and for the blank characters too, so a row of spaces
+    /// walks the same distance as a row of anything else.
+    advances: HashMap<char, u32>,
     /// Characters that have been through the rasteriser and earned no slot: a
     /// space, a face's blank glyph, a colour glyph, a codepoint nothing on the
     /// machine covers. Remembered because the answer is otherwise paid for
@@ -301,6 +315,17 @@ impl GlyphAtlas {
         self.slots.get(&c)
     }
 
+    /// What the pen advances by after drawing `c`. The cell's own width for a
+    /// character the atlas has never been asked for, which is the honest
+    /// answer while nothing has measured it.
+    pub fn advance(&self, c: char) -> u32 {
+        self.advances
+            .get(&c)
+            .copied()
+            .unwrap_or(self.cell.width)
+            .max(1)
+    }
+
     /// The slot a character draws from, rasterising and appending it when the
     /// atlas does not hold one yet.
     ///
@@ -317,6 +342,13 @@ impl GlyphAtlas {
         font: &mut FontContext,
         c: char,
     ) -> Option<GlyphSlot> {
+        // Before the two early returns rather than after them: a character
+        // whose answer is settled still owes the pen a distance, and a space
+        // reaches the second of them.
+        if !self.advances.contains_key(&c) {
+            let w = font.advance(c, self.raster_pixel_size as f32);
+            self.advances.insert(c, round_advance(w));
+        }
         if let Some(slot) = self.slots.get(&c) {
             return Some(*slot);
         }
@@ -635,16 +667,41 @@ impl FontContext {
         rasterise(&mut scaler, c, glyph_id, rasterization)
     }
 
+    /// One character's advance at a given raster size, shaped through
+    /// whichever face covers it. `None` for a codepoint nothing covers.
+    pub fn advance(&mut self, c: char, px: f32) -> f32 {
+        let mut buf = [0u8; 4];
+        self.covering_glyphs(c.encode_utf8(&mut buf), px)
+            .first()
+            .map(|(_, _, w)| *w)
+            .unwrap_or(0.0)
+    }
+
     /// Cell metrics for a face at a given raster size. The advance comes from
     /// the face, then is rounded to an integer. A terminal cell that is 6.4
     /// pixels wide has no pixel-exact rendering to offer.
     pub fn cell_metrics(&mut self, resolved: &ResolvedFont) -> CellMetrics {
         let px = resolved.raster_pixel_size as f32;
+        // "M" is the widest thing a monospace face draws and the advance
+        // every one of its cells takes, so it is the cell. A proportional
+        // grid has no such character, and measuring the widest one would buy
+        // a right margin wide enough to swallow a fifth of the screen on
+        // every line of ordinary text. So it measures "x", the height of the
+        // lower case and about the width of the average letter, and adds a
+        // fifth for the lines that run long. A line of capitals overruns the
+        // fifth and hangs off the right; that is the trade this is here to
+        // show.
+        let measured = if crate::proportional() { "x" } else { "M" };
         let advance = self
-            .covering_glyphs("M", px)
+            .covering_glyphs(measured, px)
             .first()
             .map(|(_, _, w)| *w)
             .unwrap_or(px * 0.5);
+        let advance = if crate::proportional() {
+            advance * 1.2
+        } else {
+            advance
+        };
         // Cell width is the face's own advance, rounded, and nothing else.
         //
         // An aspect-ratio squeeze factor deliberately does not appear here.
@@ -703,14 +760,16 @@ impl FontContext {
         // a charset wide enough to leave the selected family is answered by
         // several.
         let mut by_face: HashMap<fontdb::ID, Vec<(char, u16)>> = HashMap::new();
+        let mut advances: HashMap<char, u32> = HashMap::new();
         for c in chars {
             let mut buf = [0u8; 4];
-            if let Some((face, glyph_id, _)) = self
+            if let Some((face, glyph_id, w)) = self
                 .covering_glyphs(c.encode_utf8(&mut buf), px)
                 .first()
                 .copied()
             {
                 by_face.entry(face).or_default().push((c, glyph_id));
+                advances.insert(c, round_advance(w));
             }
         }
 
@@ -807,6 +866,7 @@ impl FontContext {
             raster_pixel_size: resolved.raster_pixel_size,
             generation: 0,
             slots,
+            advances,
             blank: HashSet::new(),
             pixels,
             pen_x,

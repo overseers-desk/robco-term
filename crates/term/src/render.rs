@@ -775,6 +775,33 @@ impl GridRenderer {
         block * self.cols * self.render_rows() + row * self.cols + col
     }
 
+    /// What `c` advances the pen by, in unscaled raster pixels: the cell's
+    /// width under the fixed grid, the character's own advance under
+    /// [`crate::proportional`].
+    fn pitch(&self, c: char) -> i32 {
+        if crate::proportional() {
+            self.atlas.advance(c) as i32
+        } else {
+            self.atlas.cell.width as i32
+        }
+    }
+
+    /// Where column `col` of `row` begins, in unscaled raster pixels: the sum
+    /// of the pitches to its left, which under the fixed grid is the
+    /// multiplication it replaces.
+    ///
+    /// It reads the grid's own characters, never the critter's. A figure
+    /// walking the row borrows the cell's picture and leaves its measure
+    /// alone, so the text under it does not slide sideways as it passes.
+    fn pen_x(&self, row: usize, col: usize) -> i32 {
+        if !crate::proportional() {
+            return col as i32 * self.atlas.cell.width as i32;
+        }
+        (0..col.min(self.cols))
+            .map(|c| self.pitch(self.grid.cells[row * self.cols + c].c))
+            .sum()
+    }
+
     fn build_row(&mut self, row: usize) {
         let (bg_base, glyph_base, under_base, strike_base) = (
             self.slot(BLOCK_BG, row, 0),
@@ -782,14 +809,20 @@ impl GridRenderer {
             self.slot(BLOCK_UNDERLINE, row, 0),
             self.slot(BLOCK_STRIKEOUT, row, 0),
         );
-        let cell_w = self.atlas.cell.width as i32;
         let cell_h = self.atlas.cell.height as i32;
         let baseline = self.atlas.cell.baseline;
         // The critter's cells for this row, as a run of the row-major list,
         // walked alongside the columns rather than searched per cell.
         let (mut at, end) = self.critter_row(row);
+        // The pen, walked along the row rather than multiplied into it. Under
+        // the fixed grid every step is `cell_w` and the two are the same
+        // number.
+        let mut x = 0i32;
         for col in 0..self.cols {
             let mut cell = self.grid.cells[row * self.cols + col];
+            // Taken before the critter substitution below, so the measure is
+            // the session's character and not the figure standing on it.
+            let cell_w = self.pitch(cell.c);
             // The selection is drawn here, at the one point the cell's
             // background is already being decided, and as a change to the
             // cell rather than a quad laid over it: an overlay would ride on
@@ -817,7 +850,6 @@ impl GridRenderer {
             if at < end && self.critter[at].1 == col {
                 cell.c = self.critter[at].2;
             }
-            let x = col as i32 * cell_w;
             let y = row as i32 * cell_h;
 
             self.instances[bg_base + col] = if cell.bg[3] > 0.0 {
@@ -857,6 +889,8 @@ impl GridRenderer {
             } else {
                 EMPTY
             };
+
+            x += cell_w;
         }
     }
 
@@ -871,10 +905,10 @@ impl GridRenderer {
             return;
         }
 
-        let cell_w = self.atlas.cell.width as i32;
         let cell_h = self.atlas.cell.height as i32;
         let baseline = self.atlas.cell.baseline;
-        let x = cursor.col as i32 * cell_w;
+        let x = self.pen_x(cursor.row, cursor.col);
+        let cell_w = self.pitch(self.grid.cells[cursor.row * self.cols + cursor.col].c);
         let y = cursor.row as i32 * cell_h;
 
         let (dst, size) = match cursor.shape {
@@ -918,7 +952,6 @@ impl GridRenderer {
             return;
         }
 
-        let cell_w = self.atlas.cell.width as i32;
         let cell_h = self.atlas.cell.height as i32;
         let baseline = self.atlas.cell.baseline;
         let y = cursor.row as i32 * cell_h;
@@ -926,12 +959,15 @@ impl GridRenderer {
         // with the characters inverted over it; both colours are already on
         // the cursor state, which is where the grid's own cursor reads them
         // from.
+        // The composition is not in the grid yet, so its own characters carry
+        // the pen from the cursor's cell rather than the row's.
+        let mut x = self.pen_x(cursor.row, cursor.col);
         for (i, c) in self.preedit.chars().enumerate() {
             let col = cursor.col + i;
             if col >= self.cols {
                 break;
             }
-            let x = col as i32 * cell_w;
+            let cell_w = self.pitch(c);
             self.instances[base + i * PREEDIT_BLOCKS] = Instance {
                 dst: [x, y],
                 size: [cell_w, cell_h],
@@ -940,6 +976,7 @@ impl GridRenderer {
             };
             self.instances[base + i * PREEDIT_BLOCKS + 1] =
                 glyph_instance(&self.atlas, c, x, y + baseline, cursor.text_color);
+            x += cell_w;
         }
     }
 

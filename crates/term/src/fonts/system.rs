@@ -133,8 +133,10 @@ fn families_from(db: &fontdb::Database, exclude: &[String]) -> Vec<SystemFace> {
     let mut out = Vec::new();
     for (family, face, _) in chosen {
         // The fixed-pitch check applies to the family's representative face,
-        // not every face variant.
-        if !face.monospaced {
+        // not every face variant. A proportional grid is the one reading of
+        // this list that wants the families the check throws away, so under
+        // `crate::proportional` the menu offers everything the machine has.
+        if !face.monospaced && !crate::proportional() {
             continue;
         }
         // A face with no file behind it cannot be read back for rasterising.
