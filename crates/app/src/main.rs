@@ -351,6 +351,7 @@ fn main() -> ExitCode {
     // Before any window is built, so the first frame is already drawn in
     // the face the flag named.
     app::window::set_font_override(options.font.clone());
+    term::set_prose_family(options.prose_font.clone());
 
     term::fonts::system::allow_system_lettering(
         initial_config.screen.font_source == config::FontSource::SystemFonts,

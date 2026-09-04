@@ -99,6 +99,13 @@ pub struct Options {
     /// A run-scoped override rather than an edit: it outlives a live
     /// config reload and leaves the user's file alone.
     pub font: Option<String>,
+    /// `--prose-font <family>`: a second face, in which a row with nothing
+    /// to line up is set with each character at its own width. The `--font`
+    /// face stays the grid's ruler and sets the rows that have something to
+    /// line up. A family name off the machine, not a catalogue name: the
+    /// catalogue offers fixed-pitch faces only, and this one is meant not
+    /// to be.
+    pub prose_font: Option<String>,
     /// `--settings`: open the settings window instead of a terminal. No
     /// glass, no instance lock, no config watch; this process is the
     /// settings application for as long as it lives.
@@ -134,6 +141,7 @@ pub fn help(program_name: &str) -> String {
 [-p|--profile <prof>] [--fullscreen] [-h|--help]\n\
 \x20 --default-settings  Run {program_name} with the default settings\n\
 \x20 --font <family>     Draw the glass in this font family for this run.\n\
+\x20 --prose-font <family> Set rows with nothing to line up in this family, each character at its own width.\n\
 \x20 --workdir <dir>     Change working directory to 'dir'\n\
 \x20 -e <cmd>            Command to execute. This option will catch all following arguments, so use it as the last option.\n\
 \x20 --program <prog>    Program to run instead of the user's shell.\n\
@@ -193,6 +201,13 @@ where
                     i += 1;
                 }
                 None => return Outcome::Fail("--font needs a family name\n".into()),
+            },
+            "--prose-font" => match args.get(i + 1) {
+                Some(v) => {
+                    opts.prose_font = Some(v.to_string_lossy().into_owned());
+                    i += 1;
+                }
+                None => return Outcome::Fail("--prose-font needs a family name\n".into()),
             },
             "--workdir" => match args.get(i + 1) {
                 Some(v) => {
