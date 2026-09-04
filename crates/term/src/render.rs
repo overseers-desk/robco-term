@@ -22,7 +22,7 @@
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt as _;
 
-use crate::atlas::{FontContext, GlyphAtlas};
+use crate::atlas::{FontContext, GlyphAtlas, Role};
 use crate::cells::{Cell, CellGrid, CursorShape, CursorState};
 use crate::color::{Rgba, Scheme};
 use gpu::{Gpu, Image, Target, TARGET_FORMAT};
@@ -140,6 +140,42 @@ pub struct Marked {
 ///
 /// A free function rather than a method because the row-invalidation below
 /// asks it of the *old* marking and the new one in the same breath.
+/// Whether a row has something in it to line up with the rows around it.
+///
+/// The characters that only mean anything by their column: the box-drawing
+/// block, a bar, a rule of three or more dashes or double dashes, and a run
+/// of five or more spaces, which is also what a tab has become by the time
+/// it reaches the grid. The row's trailing blanks are not a run: every row
+/// is padded to the grid's width with them.
+///
+/// A heuristic, and it errs both ways. A table row with none of these is
+/// set in prose and drifts from its rules; a sentence with a bar in it is
+/// set in the configured face. Both are cosmetic and both are visible.
+pub fn structured(cells: &[Cell]) -> bool {
+    let end = cells
+        .iter()
+        .rposition(|cell| cell.c != ' ' && cell.c != '\0')
+        .map_or(0, |i| i + 1);
+    let (mut spaces, mut rule, mut prev) = (0, 0, '\0');
+    for cell in &cells[..end] {
+        let c = cell.c;
+        if c == '|' || ('\u{2500}'..='\u{257F}').contains(&c) {
+            return true;
+        }
+        spaces = if c == ' ' { spaces + 1 } else { 0 };
+        rule = if (c == '-' || c == '=') && c == prev {
+            rule + 1
+        } else {
+            1
+        };
+        if spaces >= 5 || (rule >= 3 && (c == '-' || c == '=')) {
+            return true;
+        }
+        prev = c;
+    }
+    false
+}
+
 fn marked_at(marked: Option<&Marked>, row: usize, col: usize) -> bool {
     marked.is_some_and(|m| m.range.contains(col, m.top_line + row))
 }
@@ -240,6 +276,10 @@ pub struct GridRenderer {
     /// this: per-line damage is a statement about one screen's own lines,
     /// and a screen that has been swapped for another damaged nothing.
     stale: bool,
+    /// Whether the program below has switched to the alternate screen, which
+    /// sets every row in the configured face: a full-screen program lays its
+    /// picture out by column, whether or not any one row says so.
+    alt_screen: bool,
     /// What an input method is composing right now, drawn at the cursor and
     /// belonging to no cell of the grid. See [`GridRenderer::set_preedit`].
     preedit: String,
@@ -388,6 +428,7 @@ impl GridRenderer {
             marked: None,
             link: None,
             stale: false,
+            alt_screen: false,
             critter: Vec::new(),
             preedit: String::new(),
             scale: 1,
@@ -492,9 +533,10 @@ impl GridRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         font: &mut FontContext,
+        role: Role,
         c: char,
     ) -> bool {
-        let drawn = self.atlas.glyph(device, queue, font, c).is_some();
+        let drawn = self.atlas.glyph(device, queue, font, role, c).is_some();
         if self.atlas.generation != self.bound_generation {
             self.rebind(device);
         }
@@ -518,8 +560,12 @@ impl GridRenderer {
         font: &mut FontContext,
         cells: &[Cell],
     ) {
+        // The row's own role, read off the cells it is about to be built
+        // from, so the face the builder reaches for is the face these slots
+        // were cut in.
+        let role = self.role_of(cells);
         for cell in cells {
-            self.admit_glyph(device, queue, font, cell.c);
+            self.admit_glyph(device, queue, font, role, cell.c);
         }
     }
 
@@ -636,6 +682,16 @@ impl GridRenderer {
     /// advance, again the grid's own ruler. Clipped at the last column.
     /// Empty text takes the composition off the screen, which is what a commit
     /// and an abandoned composition both send.
+    /// Tell the renderer whether the program is on its alternate screen. A
+    /// change rebuilds every row, because every row's face may have changed
+    /// with nothing in its cells to show for it.
+    pub fn set_alternate_screen(&mut self, on: bool) {
+        if self.alt_screen != on {
+            self.alt_screen = on;
+            self.stale = true;
+        }
+    }
+
     pub fn set_preedit(&mut self, queue: &wgpu::Queue, text: &str) {
         if self.preedit == text {
             return;
@@ -676,8 +732,13 @@ impl GridRenderer {
         if self.critter == cells {
             return 0;
         }
-        for &(_, _, c) in cells {
-            self.admit_glyph(device, queue, font, c);
+        for &(row, _, c) in cells {
+            let role = if row < self.render_rows() {
+                self.row_role(row)
+            } else {
+                Role::Mono
+            };
+            self.admit_glyph(device, queue, font, role, c);
         }
         // The union of where it was and where it is: the row it has just left
         // has to be built again from the grid, which still holds the
@@ -776,31 +837,49 @@ impl GridRenderer {
         block * self.cols * self.render_rows() + row * self.cols + col
     }
 
-    /// What `c` advances the pen by, in unscaled raster pixels: the cell's
-    /// width under the fixed grid, the character's own advance under
-    /// [`crate::proportional`].
-    fn pitch(&self, c: char) -> i32 {
-        if crate::proportional() {
-            self.atlas.advance(c) as i32
+    /// Which face a row of cells is set in.
+    ///
+    /// Mono when there is no prose face, on the alternate screen, and for a
+    /// row with something to line up ([`structured`]). Prose otherwise. A
+    /// function of the row's cells and nothing else, decided again at every
+    /// rebuild: a row is set in the face its content earns at that moment,
+    /// and no flag outlives the content that set it.
+    fn role_of(&self, cells: &[Cell]) -> Role {
+        if !self.atlas.prose || self.alt_screen || structured(cells) {
+            Role::Mono
         } else {
-            self.atlas.cell.width as i32
+            Role::Prose
+        }
+    }
+
+    fn row_role(&self, row: usize) -> Role {
+        self.role_of(&self.grid.cells[row * self.cols..(row + 1) * self.cols])
+    }
+
+    /// What `c` advances the pen by in a role, in unscaled raster pixels: the
+    /// cell's width in the configured face, the character's own advance in
+    /// the prose face.
+    fn pitch(&self, role: Role, c: char) -> i32 {
+        match role {
+            Role::Mono => self.atlas.cell.width as i32,
+            Role::Prose => self.atlas.advance_in(role, c) as i32,
         }
     }
 
     /// Where column `col` of `row` begins, in unscaled raster pixels: the sum
-    /// of the pitches to its left, which under the fixed grid is the
-    /// multiplication it replaces.
+    /// of the pitches to its left, which for a mono row is the multiplication
+    /// it replaces.
     ///
     /// It reads the grid's own characters, never the critter's. A figure
     /// walking the row borrows the cell's picture and leaves its measure
     /// alone, so the text under it does not slide sideways as it passes.
     fn pen_x(&self, row: usize, col: usize) -> i32 {
-        if !crate::proportional() {
-            return col as i32 * self.atlas.cell.width as i32;
+        match self.row_role(row) {
+            Role::Mono => col as i32 * self.atlas.cell.width as i32,
+            Role::Prose => (0..col.min(self.cols))
+                .map(|c| self.pitch(Role::Prose, self.grid.cells[row * self.cols + c].c))
+                .sum(),
         }
-        (0..col.min(self.cols))
-            .map(|c| self.pitch(self.grid.cells[row * self.cols + c].c))
-            .sum()
     }
 
     fn build_row(&mut self, row: usize) {
@@ -815,15 +894,15 @@ impl GridRenderer {
         // The critter's cells for this row, as a run of the row-major list,
         // walked alongside the columns rather than searched per cell.
         let (mut at, end) = self.critter_row(row);
-        // The pen, walked along the row rather than multiplied into it. Under
-        // the fixed grid every step is `cell_w` and the two are the same
-        // number.
+        let role = self.row_role(row);
+        // The pen, walked along the row rather than multiplied into it. On a
+        // mono row every step is the cell and the two are the same number.
         let mut x = 0i32;
         for col in 0..self.cols {
             let mut cell = self.grid.cells[row * self.cols + col];
             // Taken before the critter substitution below, so the measure is
             // the session's character and not the figure standing on it.
-            let cell_w = self.pitch(cell.c);
+            let cell_w = self.pitch(role, cell.c);
             // The selection is drawn here, at the one point the cell's
             // background is already being decided, and as a change to the
             // cell rather than a quad laid over it: an overlay would ride on
@@ -865,7 +944,7 @@ impl GridRenderer {
             };
 
             self.instances[glyph_base + col] =
-                glyph_instance(&self.atlas, cell.c, x, y + baseline, cell.fg);
+                glyph_instance(&self.atlas, role, cell.c, x, y + baseline, cell.fg);
 
             // An underline sits one pixel below the baseline, a strikeout at
             // a third of the ascent above it: unscaled raster pixels, so both
@@ -908,8 +987,9 @@ impl GridRenderer {
 
         let cell_h = self.atlas.cell.height as i32;
         let baseline = self.atlas.cell.baseline;
+        let role = self.row_role(cursor.row);
         let x = self.pen_x(cursor.row, cursor.col);
-        let cell_w = self.pitch(self.grid.cells[cursor.row * self.cols + cursor.col].c);
+        let cell_w = self.pitch(role, self.grid.cells[cursor.row * self.cols + cursor.col].c);
         let y = cursor.row as i32 * cell_h;
 
         let (dst, size) = match cursor.shape {
@@ -931,7 +1011,7 @@ impl GridRenderer {
         if cursor.shape == CursorShape::Block {
             let cell = self.grid.cells[cursor.row * self.cols + cursor.col];
             self.instances[base + 1] =
-                glyph_instance(&self.atlas, cell.c, x, y + baseline, cursor.text_color);
+                glyph_instance(&self.atlas, role, cell.c, x, y + baseline, cursor.text_color);
         }
     }
 
@@ -962,13 +1042,14 @@ impl GridRenderer {
         // from.
         // The composition is not in the grid yet, so its own characters carry
         // the pen from the cursor's cell rather than the row's.
+        let role = self.row_role(cursor.row);
         let mut x = self.pen_x(cursor.row, cursor.col);
         for (i, c) in self.preedit.chars().enumerate() {
             let col = cursor.col + i;
             if col >= self.cols {
                 break;
             }
-            let cell_w = self.pitch(c);
+            let cell_w = self.pitch(role, c);
             self.instances[base + i * PREEDIT_BLOCKS] = Instance {
                 dst: [x, y],
                 size: [cell_w, cell_h],
@@ -976,7 +1057,7 @@ impl GridRenderer {
                 color: cursor.color,
             };
             self.instances[base + i * PREEDIT_BLOCKS + 1] =
-                glyph_instance(&self.atlas, c, x, y + baseline, cursor.text_color);
+                glyph_instance(&self.atlas, role, c, x, y + baseline, cursor.text_color);
             x += cell_w;
         }
     }
@@ -1084,8 +1165,15 @@ impl GridRenderer {
     }
 }
 
-fn glyph_instance(atlas: &GlyphAtlas, c: char, x: i32, baseline_y: i32, color: Rgba) -> Instance {
-    match atlas.slot(c) {
+fn glyph_instance(
+    atlas: &GlyphAtlas,
+    role: Role,
+    c: char,
+    x: i32,
+    baseline_y: i32,
+    color: Rgba,
+) -> Instance {
+    match atlas.slot_in(role, c) {
         // The pen sits at the cell's left edge on the baseline; the glyph's
         // own bearing moves it from there. Integers throughout.
         Some(slot) if color[3] > 0.0 => Instance {
@@ -1149,6 +1237,10 @@ pub mod vt {
             if viewport.sync(term).moved {
                 stats.full = true;
             }
+            self.set_alternate_screen(
+                term.mode()
+                    .contains(rio_vt::crosswords::Mode::ALT_SCREEN),
+            );
             if std::mem::take(&mut self.stale) {
                 stats.full = true;
             }

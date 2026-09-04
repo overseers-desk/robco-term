@@ -140,27 +140,20 @@ pub fn build_font(
     (resolved, font, atlas)
 }
 
-/// Whether the grid is drawn with each character at its own width, read once
-/// from `ROBCO_PROPORTIONAL` in the environment.
+/// The family the prose role is set in, named once for the life of the
+/// process, or `None` for a grid set wholly in the configured face.
 ///
-/// An experiment, and it lives on an environment variable rather than in the
-/// profile for that reason: nothing in the settings window offers it, an
-/// unset variable leaves every measurement and every pixel where they were,
-/// and the whole of it comes out in one revert.
-///
-/// Three things read it. The font menu stops filtering the machine's
-/// families down to the fixed-pitch ones, because a proportional grid drawn
-/// in a monospace face is the grid it already was. The cell the geometry
-/// divides by becomes the advance of "x" widened by a fifth, so a line of
-/// ordinary text fits the columns advertised and a line of capitals runs
-/// into the margin that fifth reserves. And the renderer walks a pen along
-/// each row instead of multiplying the column by the cell, which is what
-/// takes the vertical alignment away.
-pub fn proportional() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| {
-        std::env::var("ROBCO_PROPORTIONAL")
-            .map(|v| v != "0" && !v.is_empty())
-            .unwrap_or(false)
-    })
+/// Process-wide rather than a field, for the same reason the application
+/// keeps its `--font` that way: every window draws in it, and a window
+/// opened by a later handoff has no argument list of its own to read.
+pub fn prose_family() -> Option<&'static str> {
+    PROSE_FAMILY.get()?.as_deref()
 }
+
+/// Record the prose family. The first call wins, which is the command line's,
+/// before any font context exists to read it.
+pub fn set_prose_family(family: Option<String>) {
+    let _ = PROSE_FAMILY.set(family);
+}
+
+static PROSE_FAMILY: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();

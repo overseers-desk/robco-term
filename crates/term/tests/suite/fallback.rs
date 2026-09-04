@@ -180,7 +180,7 @@ fn a_withheld_glyph_appended_afterwards_is_the_glyph_the_build_would_have_packed
     );
     let bytes_before = atlas.total_value_count();
 
-    let appended = atlas.glyph(&gpu.device, &gpu.queue, &mut font, 'W').expect(
+    let appended = atlas.glyph(&gpu.device, &gpu.queue, &mut font, term::atlas::Role::Mono, 'W').expect(
         "W appended to an atlas that was built without it; a miss that stays a \
          miss is the empty cell this path exists to remove",
     );
@@ -220,7 +220,7 @@ fn appending_past_the_allocated_height_grows_the_texture_and_says_so() {
     let opening_height = atlas.height;
 
     for c in ascii_charset().chars() {
-        let Some(slot) = atlas.glyph(&gpu.device, &gpu.queue, &mut font, c) else {
+        let Some(slot) = atlas.glyph(&gpu.device, &gpu.queue, &mut font, term::atlas::Role::Mono, c) else {
             // A space has no ink and earns no slot, which is as true of an
             // appended character as of a packed one.
             continue;

@@ -132,6 +132,7 @@ impl Rasterization {
 /// One glyph on its way into the atlas: the mask swash produced, thresholded,
 /// with the placement it reported.
 struct Raster {
+    role: Role,
     c: char,
     w: u32,
     h: u32,
@@ -157,6 +158,7 @@ struct Raster {
 /// less than a cell that draws empty for a stated reason.
 fn rasterise(
     scaler: &mut Scaler,
+    role: Role,
     c: char,
     glyph_id: u16,
     rasterization: Rasterization,
@@ -176,6 +178,7 @@ fn rasterise(
         return None;
     }
     Some(Raster {
+        role,
         c,
         w,
         h,
@@ -247,6 +250,20 @@ pub struct GlyphSlot {
     pub top: i32,
 }
 
+/// Which of the two faces a character is drawn from. Every row of the grid
+/// is set in one of them, and the atlas keeps both under one texture, keyed
+/// by role and character, so a row of either kind is one draw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Role {
+    /// The configured face, the one the grid's cell is measured from. Every
+    /// row is set in it when there is no prose face, and the rows with
+    /// something to line up are set in it regardless.
+    Mono,
+    /// The prose face, each character at its own advance. Rows with nothing
+    /// to line up are set in it, when one is configured.
+    Prose,
+}
+
 /// A shaped advance as whole raster pixels, floored at one so no character
 /// leaves the pen where it found it. The rounding is the same concession the
 /// cell makes: there is no pixel-exact rendering of a 6.4-pixel step.
@@ -281,20 +298,24 @@ pub struct GlyphAtlas {
     /// binding to an allocation this atlas has replaced, and the picture it
     /// draws is whatever that allocation happened to hold.
     pub generation: u64,
-    slots: HashMap<char, GlyphSlot>,
+    slots: HashMap<(Role, char), GlyphSlot>,
     /// What each character advances the pen by, in unscaled raster pixels:
     /// the shaped advance of the face that covers it, which is the one
     /// measure a glyph's bitmap cannot supply (a space has an advance and no
     /// ink, and a comma has far more ink than advance). Filled beside the
     /// slot table, and for the blank characters too, so a row of spaces
     /// walks the same distance as a row of anything else.
-    advances: HashMap<char, u32>,
+    advances: HashMap<(Role, char), u32>,
+    /// Whether a prose face was configured when this atlas was built, so a
+    /// renderer holding only the atlas can tell whether a row may be set in
+    /// one. The face itself is [`FontContext`]'s.
+    pub prose: bool,
     /// Characters that have been through the rasteriser and earned no slot: a
     /// space, a face's blank glyph, a colour glyph, a codepoint nothing on the
     /// machine covers. Remembered because the answer is otherwise paid for
     /// again every time the row it sits in is rebuilt, and a screen of spaces
     /// would reshape a screen of spaces on every redraw.
-    blank: HashSet<char>,
+    blank: HashSet<(Role, char)>,
     /// The atlas as bytes, kept so a glyph can be appended without the GPU
     /// being asked to read back what it already holds, and so a reallocation
     /// has something to re-upload.
@@ -311,16 +332,22 @@ pub struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
+    /// The configured face's slot for `c`: what a caller outside the grid,
+    /// such as a badge, draws its letters from.
     pub fn slot(&self, c: char) -> Option<&GlyphSlot> {
-        self.slots.get(&c)
+        self.slot_in(Role::Mono, c)
     }
 
-    /// What the pen advances by after drawing `c`. The cell's own width for a
-    /// character the atlas has never been asked for, which is the honest
-    /// answer while nothing has measured it.
-    pub fn advance(&self, c: char) -> u32 {
+    pub fn slot_in(&self, role: Role, c: char) -> Option<&GlyphSlot> {
+        self.slots.get(&(role, c))
+    }
+
+    /// What the pen advances by after drawing `c` in `role`. The cell's own
+    /// width for a character the atlas has never been asked for, which is the
+    /// honest answer while nothing has measured it.
+    pub fn advance_in(&self, role: Role, c: char) -> u32 {
         self.advances
-            .get(&c)
+            .get(&(role, c))
             .copied()
             .unwrap_or(self.cell.width)
             .max(1)
@@ -340,25 +367,27 @@ impl GlyphAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         font: &mut FontContext,
+        role: Role,
         c: char,
     ) -> Option<GlyphSlot> {
+        let key = (role, c);
         // Before the two early returns rather than after them: a character
         // whose answer is settled still owes the pen a distance, and a space
         // reaches the second of them.
-        if !self.advances.contains_key(&c) {
-            let w = font.advance(c, self.raster_pixel_size as f32);
-            self.advances.insert(c, round_advance(w));
+        if !self.advances.contains_key(&key) {
+            let w = font.advance(role, c, self.raster_pixel_size as f32);
+            self.advances.insert(key, round_advance(w));
         }
-        if let Some(slot) = self.slots.get(&c) {
+        if let Some(slot) = self.slots.get(&key) {
             return Some(*slot);
         }
-        if self.blank.contains(&c) {
+        if self.blank.contains(&key) {
             return None;
         }
-        let raster = font.glyph_raster(c, self.raster_pixel_size as f32, self.rasterization);
+        let raster = font.glyph_raster(role, c, self.raster_pixel_size as f32, self.rasterization);
         let placed = raster.and_then(|r| self.append(device, queue, r));
         if placed.is_none() {
-            self.blank.insert(c);
+            self.blank.insert(key);
         }
         placed
     }
@@ -448,7 +477,7 @@ impl GlyphAtlas {
 
         self.pen_x += r.w;
         self.shelf_h = self.shelf_h.max(r.h);
-        self.slots.insert(r.c, slot);
+        self.slots.insert((r.role, r.c), slot);
         Some(slot)
     }
 
@@ -488,6 +517,11 @@ pub struct FontContext {
     scale_context: ScaleContext,
     pub font_id: fontdb::ID,
     pub family: String,
+    /// The family the prose role shapes through, when one is configured.
+    /// Checked against the database at construction, so a name the machine
+    /// does not have is a logged refusal here and never a silent substitute
+    /// at the shaper.
+    prose_family: Option<String>,
     /// The catalogue name of the selected face, which is where its fallback
     /// chain is written down.
     name: &'static str,
@@ -549,6 +583,29 @@ impl FontContext {
             .first()
             .map(|(name, _)| name.clone())
             .unwrap_or_default();
+        // The prose face is a family the machine has, so asking for one
+        // reads the machine's fonts here, up front. The check is against the
+        // database and not left to the shaper: cosmic-text answers an
+        // unknown family with whatever face it likes, and a prose row set in
+        // a face nobody named would be a wrong picture with no line in the
+        // log to explain it.
+        let mut system_fonts = false;
+        let prose_family = crate::prose_family().and_then(|wanted| {
+            db.load_system_fonts();
+            system_fonts = true;
+            let known = db
+                .faces()
+                .any(|f| f.families.iter().any(|(name, _)| name == wanted));
+            if known {
+                Some(wanted.to_string())
+            } else {
+                log::error!(
+                    "the prose face {wanted:?} is not a family on this machine; \
+                     every row is set in {family:?}"
+                );
+                None
+            }
+        });
         // Locale is fixed rather than read from the environment so two runs on
         // two machines shape the same text the same way.
         let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
@@ -557,9 +614,26 @@ impl FontContext {
             scale_context: ScaleContext::new(),
             font_id,
             family,
+            prose_family,
             name: spec.name,
             bundled_fallbacks: false,
-            system_fonts: false,
+            system_fonts,
+        }
+    }
+
+    /// The family the prose role is set in, when the machine has it.
+    pub fn prose_family(&self) -> Option<&str> {
+        self.prose_family.as_deref()
+    }
+
+    /// The family a role shapes through: the configured face, or the prose
+    /// face where there is one. A prose row on a context with no prose face
+    /// is set in the configured face, which is what the renderer asks for
+    /// anyway once it has read [`GlyphAtlas::prose`].
+    fn family_of(&self, role: Role) -> &str {
+        match role {
+            Role::Mono => &self.family,
+            Role::Prose => self.prose_family.as_deref().unwrap_or(&self.family),
         }
     }
 
@@ -595,7 +669,17 @@ impl FontContext {
     /// file reads, in front of the first frame of every session, including
     /// every session that never leaves ASCII.
     pub fn covering_glyphs(&mut self, text: &str, pixel_size: f32) -> Vec<(fontdb::ID, u16, f32)> {
-        let mut shaped = self.shape(text, pixel_size);
+        self.covering_glyphs_in(Role::Mono, text, pixel_size)
+    }
+
+    /// [`Self::covering_glyphs`] for either role.
+    pub fn covering_glyphs_in(
+        &mut self,
+        role: Role,
+        text: &str,
+        pixel_size: f32,
+    ) -> Vec<(fontdb::ID, u16, f32)> {
+        let mut shaped = self.shape(role, text, pixel_size);
         let uncovered = |s: &[(fontdb::ID, u16, f32)]| s.iter().any(|(_, id, _)| *id == 0);
         if !self.bundled_fallbacks && uncovered(&shaped) {
             self.bundled_fallbacks = true;
@@ -610,7 +694,7 @@ impl FontContext {
                     face.name
                 );
             }
-            shaped = self.shape(text, pixel_size);
+            shaped = self.shape(role, text, pixel_size);
         }
         if self.system_fonts || !uncovered(&shaped) {
             return shaped;
@@ -623,13 +707,13 @@ impl FontContext {
             text,
             self.font_system.db().len()
         );
-        self.shape(text, pixel_size)
+        self.shape(role, text, pixel_size)
     }
 
-    fn shape(&mut self, text: &str, pixel_size: f32) -> Vec<(fontdb::ID, u16, f32)> {
+    fn shape(&mut self, role: Role, text: &str, pixel_size: f32) -> Vec<(fontdb::ID, u16, f32)> {
         let metrics = Metrics::new(pixel_size, pixel_size);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
-        let family = self.family.clone();
+        let family = self.family_of(role).to_string();
         let attrs = Attrs::new()
             .family(Family::Name(&family))
             // Tell cosmic-text this is a pixel face. On its own this only
@@ -651,10 +735,16 @@ impl FontContext {
     /// Shape one character, rasterise it out of whichever face covers it, and
     /// apply the mode. The atlas's append path; [`Self::build_atlas`] is the
     /// same three steps taken in bulk, over a charset instead of a character.
-    fn glyph_raster(&mut self, c: char, px: f32, rasterization: Rasterization) -> Option<Raster> {
+    fn glyph_raster(
+        &mut self,
+        role: Role,
+        c: char,
+        px: f32,
+        rasterization: Rasterization,
+    ) -> Option<Raster> {
         let mut buf = [0u8; 4];
         let (face, glyph_id, _) = self
-            .covering_glyphs(c.encode_utf8(&mut buf), px)
+            .covering_glyphs_in(role, c.encode_utf8(&mut buf), px)
             .first()
             .copied()?;
         let font = self.font_system.get_font(face, fontdb::Weight::NORMAL)?;
@@ -664,14 +754,14 @@ impl FontContext {
             .size(px)
             .hint(true)
             .build();
-        rasterise(&mut scaler, c, glyph_id, rasterization)
+        rasterise(&mut scaler, role, c, glyph_id, rasterization)
     }
 
-    /// One character's advance at a given raster size, shaped through
-    /// whichever face covers it. `0.0` for a codepoint nothing covers.
-    pub fn advance(&mut self, c: char, px: f32) -> f32 {
+    /// One character's advance at a given raster size in a role, shaped
+    /// through whichever face covers it. `0.0` for a codepoint nothing covers.
+    pub fn advance(&mut self, role: Role, c: char, px: f32) -> f32 {
         let mut buf = [0u8; 4];
-        self.covering_glyphs(c.encode_utf8(&mut buf), px)
+        self.covering_glyphs_in(role, c.encode_utf8(&mut buf), px)
             .first()
             .map(|(_, _, w)| *w)
             .unwrap_or(0.0)
@@ -682,27 +772,11 @@ impl FontContext {
     /// pixels wide has no pixel-exact rendering to offer.
     pub fn cell_metrics(&mut self, resolved: &ResolvedFont) -> CellMetrics {
         let px = resolved.raster_pixel_size as f32;
-        // "M" is the widest thing a monospace face draws and the advance
-        // every one of its cells takes, so it is the cell. A proportional
-        // grid has no such character, and measuring the widest one would buy
-        // a right margin wide enough to swallow a fifth of the screen on
-        // every line of ordinary text. So it measures "x", the height of the
-        // lower case and about the width of the average letter, and adds a
-        // fifth for the lines that run long. A line of capitals overruns the
-        // fifth and hangs off the right; that is the trade this is here to
-        // show. The fifth is the width to try first and nothing has measured
-        // it, so it is where a reader who dislikes the margin should start.
-        let measured = if crate::proportional() { "x" } else { "M" };
         let advance = self
-            .covering_glyphs(measured, px)
+            .covering_glyphs("M", px)
             .first()
             .map(|(_, _, w)| *w)
             .unwrap_or(px * 0.5);
-        let advance = if crate::proportional() {
-            advance * 1.2
-        } else {
-            advance
-        };
         // Cell width is the face's own advance, rounded, and nothing else.
         //
         // An aspect-ratio squeeze factor deliberately does not appear here.
@@ -761,7 +835,7 @@ impl FontContext {
         // a charset wide enough to leave the selected family is answered by
         // several.
         let mut by_face: HashMap<fontdb::ID, Vec<(char, u16)>> = HashMap::new();
-        let mut advances: HashMap<char, u32> = HashMap::new();
+        let mut advances: HashMap<(Role, char), u32> = HashMap::new();
         for c in chars {
             let mut buf = [0u8; 4];
             if let Some((face, glyph_id, w)) = self
@@ -770,7 +844,7 @@ impl FontContext {
                 .copied()
             {
                 by_face.entry(face).or_default().push((c, glyph_id));
-                advances.insert(c, round_advance(w));
+                advances.insert((Role::Mono, c), round_advance(w));
             }
         }
 
@@ -793,7 +867,7 @@ impl FontContext {
                 .hint(true)
                 .build();
             for (c, glyph_id) in wanted {
-                if let Some(r) = rasterise(&mut scaler, c, glyph_id, rasterization) {
+                if let Some(r) = rasterise(&mut scaler, Role::Mono, c, glyph_id, rasterization) {
                     rasters.push(r);
                 }
             }
@@ -817,7 +891,7 @@ impl FontContext {
                 shelf_h = 0;
             }
             slots.insert(
-                r.c,
+                (r.role, r.c),
                 GlyphSlot {
                     atlas_x: pen_x,
                     atlas_y: pen_y,
@@ -838,7 +912,7 @@ impl FontContext {
 
         let mut pixels = vec![0u8; (atlas_w * atlas_h) as usize];
         for r in &rasters {
-            let slot = slots[&r.c];
+            let slot = slots[&(r.role, r.c)];
             for row in 0..r.h {
                 let src = (row * r.w) as usize;
                 let dst = ((slot.atlas_y + row) * atlas_w + slot.atlas_x) as usize;
@@ -868,6 +942,7 @@ impl FontContext {
             generation: 0,
             slots,
             advances,
+            prose: self.prose_family.is_some(),
             blank: HashSet::new(),
             pixels,
             pen_x,
