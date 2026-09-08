@@ -292,6 +292,7 @@ fn sizing_request(cfg: &Config, scale_factor: f64) -> SizingRequest {
         line_spacing: cfg.screen.line_spacing,
         font_width: cfg.screen.font_width,
         device_pixel_ratio: scale_factor,
+        prose_scaling: cfg.screen.prose_scaling,
     }
 }
 

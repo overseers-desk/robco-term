@@ -161,6 +161,7 @@ fn resolved_font_matches_golden() {
                 device_pixel_ratio: c["in_dpr"].as_f64().unwrap(),
                 line_spacing: c["in_lineSpacing"].as_f64().unwrap(),
                 font_width: c["in_fontWidth"].as_f64().unwrap(),
+                prose_scaling: 1.0,
             };
             let got = sizing::resolve(entry, &req);
             let ctx = format!("{name} @ {} x {}", c["in_fontSize"], c["in_dpr"]);
