@@ -63,7 +63,11 @@ fn main() {
         .unwrap_or_else(|| panic!("{family} is not in the system catalogue"));
     let gpu = Gpu::new().expect("an offscreen device");
 
-    let resolved = sizing::resolve(spec, &SizingRequest::default(), ScalePolicy::Floor);
+    let request = SizingRequest {
+        prose_scaling: config::Config::default().screen.prose_scaling,
+        ..SizingRequest::default()
+    };
+    let resolved = sizing::resolve(spec, &request, ScalePolicy::Floor);
     let mut font = FontContext::new(spec);
     let atlas = font.build_atlas(
         &gpu.device,
@@ -73,8 +77,9 @@ fn main() {
         Rasterization::for_face(&resolved),
     );
     println!(
-        "{family}: raster {}px, cell {}x{}, prose face {:?}",
+        "{family}: raster {}px, prose {}px, cell {}x{}, prose face {:?}",
         resolved.raster_pixel_size,
+        resolved.prose_pixel_size,
         atlas.cell.width,
         atlas.cell.height,
         font.prose_family()

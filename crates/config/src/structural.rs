@@ -11,8 +11,8 @@
 //!
 //! - **Scale / geometry that resizes a framebuffer or glyph atlas**:
 //!   `general.window_scaling`, `general.font_scaling`, `screen.font_width`,
-//!   `screen.line_spacing`, `screen.margin`, `screen.frame_size`,
-//!   `chassis.frame_size`.
+//!   `screen.line_spacing`, `screen.margin`, `screen.prose_scaling`,
+//!   `screen.frame_size`, `chassis.frame_size`.
 //! - **Framebuffer format/resolution** (the bloom and burn-in passes each
 //!   own an offscreen framebuffer whose resolution these quality knobs
 //!   set): `general.bloom_quality`, `general.burn_in_quality`.
@@ -62,6 +62,7 @@ pub const STRUCTURAL: &[&str] = &[
     "screen.font_width",
     "screen.line_spacing",
     "screen.margin",
+    "screen.prose_scaling",
     "screen.frame_size",
     "chassis.shell",
     "chassis.channel_indicator",

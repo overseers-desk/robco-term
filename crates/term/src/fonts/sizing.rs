@@ -23,6 +23,10 @@ pub struct SizingRequest {
     pub font_width: f64,
     pub window_scaling: f64,
     pub device_pixel_ratio: f64,
+    /// The prose face's pixel size as a multiple of the configured face's.
+    /// `1.0` here is the neutral request; the profile's own default is the
+    /// schema's to state.
+    pub prose_scaling: f64,
 }
 
 impl Default for SizingRequest {
@@ -34,6 +38,7 @@ impl Default for SizingRequest {
             font_width: 1.0,
             window_scaling: 1.0,
             device_pixel_ratio: 1.0,
+            prose_scaling: 1.0,
         }
     }
 }
@@ -83,6 +88,10 @@ pub struct ResolvedFont {
     /// The size handed to the rasteriser. Pinned to the face's design size for
     /// a low-resolution face, independent of every scaling knob and of DPR.
     pub raster_pixel_size: u32,
+    /// The size the prose face is rasterised at: the configured face's size
+    /// times `prose_scaling`, floored at one. The row keeps the configured
+    /// face's height regardless.
+    pub prose_pixel_size: u32,
     /// Total magnification applied as geometry: `texture_scale * dpr_scale`.
     pub integer_scale: u32,
     /// The font-scaling half.
@@ -168,6 +177,7 @@ pub fn resolve(entry: &FontEntry, req: &SizingRequest, policy: ScalePolicy) -> R
 
     ResolvedFont {
         raster_pixel_size: computed.pixel_size,
+        prose_pixel_size: ((computed.pixel_size as f64 * req.prose_scaling).round() as u32).max(1),
         integer_scale: texture_scale * dpr_scale,
         texture_scale,
         dpr_scale,

@@ -299,6 +299,7 @@ fn sizing_request(cfg: &Config, scale_factor: f64) -> SizingRequest {
         font_width: cfg.screen.font_width,
         window_scaling: cfg.general.window_scaling,
         device_pixel_ratio: scale_factor,
+        prose_scaling: cfg.screen.prose_scaling,
         ..SizingRequest::default()
     }
 }

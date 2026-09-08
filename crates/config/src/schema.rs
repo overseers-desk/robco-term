@@ -150,6 +150,13 @@ pub struct ScreenSettings {
     /// the prose face, when a run has one. Live: an edit reaches the glass
     /// without a rebuild.
     pub monospace_trigger: String,
+    /// How much larger the prose face is rasterised than the configured
+    /// face, as a multiple of its pixel size. The row does not grow with
+    /// it: a prose glyph taller than the row draws over the row above, by
+    /// choice. At the same pixel size a serif's lower case is shorter than
+    /// a mono's, and a prose row is shorter in width, so the prose has room
+    /// to grow and reads small without it.
+    pub prose_scaling: f64,
     /// Carried for schema parity with the frozen v1 shape; the cursor does
     /// not blink in this build regardless of the value (docs/config.md,
     /// `[screen]`). Wiring it is a deliberately open design fork.
@@ -290,6 +297,7 @@ impl Default for ScreenSettings {
             // `^ +\S {4,}` fall outside it on purpose, and a change that lets
             // them in sets indented prose and lists in the mono face.
             monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S.*\S {4,}".to_string(),
+            prose_scaling: 1.2,
             blinking_cursor: false,
             frame_size: 0.1,
             screen_radius: 0.1,

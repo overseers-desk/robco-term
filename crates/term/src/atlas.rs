@@ -291,6 +291,9 @@ pub struct GlyphAtlas {
     /// The size everything in here was rasterised at. Recorded so a DPR change
     /// can assert it did *not* move.
     pub raster_pixel_size: u32,
+    /// The size the prose role is rasterised at. Larger than the row when
+    /// the profile says so; the glyph then draws over the row above.
+    pub prose_pixel_size: u32,
     /// How many times the texture behind [`Self::view`] has been replaced,
     /// which happens when a glyph is appended past the allocated height.
     /// Anything holding a bind group over this atlas records the number it
@@ -374,8 +377,12 @@ impl GlyphAtlas {
         // Before the two early returns rather than after them: a character
         // whose answer is settled still owes the pen a distance, and a space
         // reaches the second of them.
+        let px = match role {
+            Role::Mono => self.raster_pixel_size,
+            Role::Prose => self.prose_pixel_size,
+        } as f32;
         if !self.advances.contains_key(&key) {
-            let w = font.advance(role, c, self.raster_pixel_size as f32);
+            let w = font.advance(role, c, px);
             self.advances.insert(key, round_advance(w));
         }
         if let Some(slot) = self.slots.get(&key) {
@@ -384,7 +391,7 @@ impl GlyphAtlas {
         if self.blank.contains(&key) {
             return None;
         }
-        let raster = font.glyph_raster(role, c, self.raster_pixel_size as f32, self.rasterization);
+        let raster = font.glyph_raster(role, c, px, self.rasterization);
         let placed = raster.and_then(|r| self.append(device, queue, r));
         if placed.is_none() {
             self.blank.insert(key);
@@ -939,6 +946,7 @@ impl FontContext {
             cell,
             rasterization,
             raster_pixel_size: resolved.raster_pixel_size,
+            prose_pixel_size: resolved.prose_pixel_size,
             generation: 0,
             slots,
             advances,

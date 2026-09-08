@@ -60,7 +60,7 @@ ghost of your last screenful starts over. Those keys are:
 `general.burn_in_quality`, `general.chassis_shown`,
 `general.led_characters`, `screen.font_name`, `screen.font_source`,
 `screen.font_width`, `screen.line_spacing`, `screen.margin`,
-`screen.frame_size`, `chassis.shell`, `chassis.channel_indicator`,
+`screen.prose_scaling`, `screen.frame_size`, `chassis.shell`, `chassis.channel_indicator`,
 `chassis.channel_display`, `chassis.frame_size`, `chassis.bank_font_name`.
 
 Nothing else about them is special. If you are not chasing a burn-in trail
@@ -199,6 +199,7 @@ effects that age them.
 | `line_spacing` | `0.1` | Extra height per row. |
 | `margin` | `0.3` | Inset between the type and the bezel. |
 | `monospace_trigger` | `'[\|\x{2500}-\x{257F}]\|-{3,}\|={3,}\|\S.*\S {4,}'` | A regular expression over a row's text, trailing blanks trimmed. A row it matches is set in the configured face; any other row is set in the prose face, when the run has one (`--prose-font`). The shipped run of spaces must come after text: indentation and list markers line up in prose by themselves, and only a run after words of varying width needs the ruler. Write it as a TOML literal string (single quotes) so the backslashes stay; the file is UTF-8, so `[│┼─]` is as good as a code-point range. Live. |
+| `prose_scaling` | `1.2` | How much larger the prose face (`--prose-font`) is rasterised than the configured face. The row does not grow with it; a glyph taller than the row draws over the row above. |
 | `frame_size` | `0.1` | The tube's own moulding. Governs only when `general.chassis_shown` is off. |
 | `screen_radius` | `0.1` | Corner radius of that moulding, `4` to `120` pixels across the range. Governs only when `general.chassis_shown` is off. |
 | `frame_color` | `"#cfcfcf"` | As above: the bare tube's moulding. |
