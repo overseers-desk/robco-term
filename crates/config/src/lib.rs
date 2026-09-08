@@ -416,7 +416,11 @@ key = "/home/overseer/.ssh/id_gw"
         // The doc's tables. A section opens at `### `...`[name]``; a data
         // row is `| `key` | `default` | ... |`.
         let doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/config.md"));
-        let strip = |cell: &str| cell.trim().trim_matches('`').to_string();
+        // A `\|` in a cell is a bar in the value, not a column boundary:
+        // `screen.monospace_trigger`'s default is a pattern with alternation
+        // in it. It is held aside while the row is split and put back after.
+        const BAR: &str = "\u{0}";
+        let strip = |cell: &str| cell.trim().trim_matches('`').replace(BAR, "|");
         let mut documented: BTreeMap<(String, String), String> = BTreeMap::new();
         let mut section = String::new();
         for line in doc.lines() {
@@ -427,7 +431,8 @@ key = "/home/overseer/.ssh/id_gw"
                     .unwrap_or("")
                     .to_string();
             } else if !section.is_empty() && line.starts_with("| `") {
-                let cols: Vec<&str> = line.trim_matches('|').split('|').collect();
+                let held = line.replace("\\|", BAR);
+                let cols: Vec<&str> = held.trim_matches('|').split('|').collect();
                 if cols.len() >= 2 {
                     documented.insert((section.clone(), strip(cols[0])), strip(cols[1]));
                 }

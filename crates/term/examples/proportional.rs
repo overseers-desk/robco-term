@@ -45,6 +45,8 @@ const LINES: &[&str] = &[
     "name         size   date",
     "readme.md    1204   Sep 3",
     "----------------------------",
+    "",
+    "     five spaces at the head",
 ];
 const COLS: usize = 34;
 
@@ -84,6 +86,12 @@ fn main() {
         COLS,
         LINES.len(),
         scheme.clone(),
+    );
+    // The shipped trigger, off the schema's default: the one home the
+    // pattern has.
+    let trigger = config::Config::default().screen.monospace_trigger;
+    renderer.set_monospace_trigger(
+        regex::Regex::new(&trigger).expect("the shipped monospace_trigger compiles"),
     );
     let grid = CellGrid::from_lines(LINES, COLS, LINES.len(), &scheme);
     // The prose face's glyphs are cut on demand, row by row, the way the
