@@ -270,10 +270,26 @@ impl Default for ScreenSettings {
             line_spacing: 0.1,
             margin: 0.3,
             // The box-drawing block, a bar, a rule of three dashes or double
-            // dashes, and five spaces after something that is not a space:
-            // a run at the head of a row is indentation, which lines up with
-            // its neighbours whatever face it is set in.
-            monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S {5,}".to_string(),
+            // dashes, and a run of four or more spaces that comes after text.
+            //
+            // Why the run must come after text, and not merely after a
+            // character. A run of spaces at the head of a row is indentation.
+            // In a proportional face n spaces are n copies of one glyph, so
+            // every row indented by n starts its text at the same x whatever
+            // else is on it: indentation lines up in prose by itself, and
+            // setting those rows in the mono face would gain nothing and
+            // lose the prose. A run after a single line-initial character is
+            // the same case, a list marker (`-`, `1.`, `*`) followed by the
+            // item, and the items line up for the same reason. A run after
+            // real text is the case that needs the ruler: what precedes it
+            // is a different width on every row, so in prose the column
+            // after it lands somewhere else on every row.
+            //
+            // So the pattern wants two non-blank characters before the run,
+            // with anything between them: `\S.*\S {4,}`. `^\S {4,}` and
+            // `^ +\S {4,}` fall outside it on purpose, and a change that lets
+            // them in sets indented prose and lists in the mono face.
+            monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S.*\S {4,}".to_string(),
             blinking_cursor: false,
             frame_size: 0.1,
             screen_radius: 0.1,
