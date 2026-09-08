@@ -99,9 +99,15 @@ the build and packaging detail.
 ## Installing
 
 The [releases page](https://github.com/overseers-desk/RobCo-Terminal/releases)
-carries a `.deb` for Debian and Ubuntu and a self-contained tarball.
-Every route below builds the same artifacts
-from a checkout.
+carries a `.deb` for Debian and Ubuntu, a self-contained tarball, and a
+Windows `.exe`.
+
+**On Windows** there is nothing to install. The release carries one file,
+`robco-term-<version>-windows-x86_64.exe`, and everything the terminal needs
+is inside it, the settings window included. Put it where you like and run it.
+
+The rest of this section is Linux, and every route below builds the same
+artifacts from a checkout.
 
 ```console
 $ git clone https://github.com/overseers-desk/RobCo-Terminal
