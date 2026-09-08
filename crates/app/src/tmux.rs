@@ -1387,7 +1387,7 @@ mod tests {
         // not consume a pending reply, or the server's name lands on the
         // listing's intent and every later reply is one behind.
         assert_eq!(
-            gateway.advance(b"%config-error /home/u/.tmux.conf:3: unknown command\r\n"),
+            gateway.advance(b"%config-error /etc/tmux.conf:3: unknown command\r\n"),
             vec![]
         );
         assert_eq!(
