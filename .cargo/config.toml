@@ -1,4 +1,0 @@
-# This host builds on one full-ish filesystem: no incremental caches; a
-# full workspace test build stays in single-digit gigabytes this way.
-[build]
-incremental = false

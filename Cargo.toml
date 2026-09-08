@@ -36,12 +36,6 @@ version = "0.2.3"
 [patch.crates-io]
 rio-vt = { git = "https://github.com/overseers-desk/rio", rev = "b6b5a8e97996af7268a8aa7a07856243133d351c" }
 
-[profile.dev]
-debug = "line-tables-only"
-
-[profile.test]
-debug = "line-tables-only"
-
 # The crash logger writes module+offset frames; turning those into file:line
 # takes line tables in the shipped binary, so the release profile carries them.
 # Line tables alone, not full debug info: they cost a few megabytes of a
