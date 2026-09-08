@@ -28,6 +28,7 @@ use crate::cells::{Cell, CellGrid, CursorShape, CursorState};
 use crate::color::{Rgba, Scheme};
 use gpu::{Gpu, Image, Target, TARGET_FORMAT};
 use crate::selection::MarkedRange;
+use rio_vt::crosswords::pos::Side;
 
 /// One quad. All integers: the CPU decides the exact pixels, the GPU only
 /// fills them in.
@@ -676,6 +677,51 @@ impl GridRenderer {
     /// advance, again the grid's own ruler. Clipped at the last column.
     /// Empty text takes the composition off the screen, which is what a commit
     /// and an abandoned composition both send.
+    /// Which column of `row` a point falls in, and which half of that column,
+    /// the point measured in physical pixels from the grid's left edge.
+    ///
+    /// The inverse of [`Self::pen_x`], and it has to be one: a press lands on
+    /// the character drawn under it. A mono row is the division
+    /// `TermSize::column_side_at` makes, in the physical cell that is this
+    /// atlas's cell times the scale. A prose row has a different width per
+    /// column, so it walks them, and only this side of the seam holds the
+    /// widths to walk.
+    ///
+    /// The side names the seam between two columns, which is what the rio
+    /// selection model anchors on. It is read within the column the point
+    /// landed in, so a press on the right half of a wide character and one
+    /// on the right half of a narrow character both leave their character
+    /// behind.
+    pub fn column_side_at(&self, row: usize, x: f64) -> (usize, Side) {
+        let side = |fraction: f64| {
+            if fraction >= 0.5 {
+                Side::Right
+            } else {
+                Side::Left
+            }
+        };
+        let raster = x / f64::from(self.scale.max(1));
+        let last = self.cols.saturating_sub(1);
+        if row >= self.render_rows() || self.row_role(row) == Role::Mono {
+            let cell = f64::from(self.atlas.cell.width.max(1));
+            let column = (raster / cell).floor().clamp(0.0, last as f64) as usize;
+            return (column, side((raster / cell).fract()));
+        }
+        let mut pen = 0.0;
+        for col in 0..last {
+            let width = f64::from(self.pitch(Role::Prose, self.grid.cells[row * self.cols + col].c));
+            if raster < pen + width {
+                return (col, side((raster - pen) / width));
+            }
+            pen += width;
+        }
+        // Past every column but the last one, which keeps a press beyond the
+        // row's drawn width: a prose row ends short of the glass, and a press
+        // in that margin is still a press on the row.
+        let width = f64::from(self.pitch(Role::Prose, self.grid.cells[row * self.cols + last].c));
+        (last, side((raster - pen) / width))
+    }
+
     /// Set what makes a row a mono row. Every row is rebuilt, because any of
     /// them may have changed face with nothing in its cells to show for it.
     pub fn set_monospace_trigger(&mut self, trigger: Regex) {
@@ -876,7 +922,7 @@ impl GridRenderer {
     /// It reads the grid's own characters, never the critter's. A figure
     /// walking the row borrows the cell's picture and leaves its measure
     /// alone, so the text under it does not slide sideways as it passes.
-    fn pen_x(&self, row: usize, col: usize) -> i32 {
+    pub fn pen_x(&self, row: usize, col: usize) -> i32 {
         match self.row_role(row) {
             Role::Mono => col as i32 * self.atlas.cell.width as i32,
             Role::Prose => (0..col.min(self.cols))

@@ -541,6 +541,15 @@ pub struct FontContext {
 
 impl FontContext {
     pub fn new(spec: &FontEntry) -> Self {
+        Self::with_prose(spec, crate::prose_family())
+    }
+
+    /// The same, with the prose face named rather than read from the
+    /// process. The process-wide name is the application's answer, set once
+    /// from the command line; a caller that holds its own answer, such as a
+    /// test that must not decide the face for every other context in its
+    /// process, passes it here.
+    pub fn with_prose(spec: &FontEntry, prose: Option<&str>) -> Self {
         let mut db = fontdb::Database::new();
         db.load_font_data(spec.data().to_vec());
         // A bundled face cannot fail here -- it is `include_bytes!` of a file
@@ -597,7 +606,7 @@ impl FontContext {
         // a face nobody named would be a wrong picture with no line in the
         // log to explain it.
         let mut system_fonts = false;
-        let prose_family = crate::prose_family().and_then(|wanted| {
+        let prose_family = prose.and_then(|wanted| {
             db.load_system_fonts();
             system_fonts = true;
             let known = db

@@ -20,7 +20,24 @@ use term::fonts::{
     filtered_fonts, font_by_name, system_fonts, FontSource, MODERN_RASTERIZATION,
     SYSTEM_FONT_PIXEL_SIZE,
 };
+use gpu::harness::GpuLock;
+use gpu::Gpu;
+use rio_vt::crosswords::pos::Side;
+use term::cells::CellGrid;
+use term::color::Scheme;
+use term::render::GridRenderer;
 use term::{ascii_charset, FontContext, Rasterization};
+
+fn gpu() -> Option<(Gpu, GpuLock)> {
+    let lock = GpuLock::acquire().expect("the GPU lock");
+    match Gpu::new() {
+        Ok(gpu) => Some((gpu, lock)),
+        Err(e) => {
+            eprintln!("skipping: no wgpu adapter ({e})");
+            None
+        }
+    }
+}
 
 const DEJAVU: &str = "DejaVu Sans Mono";
 
@@ -155,5 +172,75 @@ fn a_selected_system_face_shapes_and_measures() {
     assert!(
         !ascii_charset().is_empty(),
         "the charset the atlas would be built over is empty"
+    );
+}
+
+/// A press lands on the character drawn under it, on a prose row as much as
+/// on a mono one.
+///
+/// The renderer places column `col` of a prose row at the sum of the
+/// advances to its left, each character its own; feeding that x back has to
+/// name `col` again. The placement and its inverse are written apart, so
+/// nothing but this holds them together.
+///
+/// The prose face is named here rather than set on the process. A
+/// process-wide name would give every other atlas in this test binary a
+/// prose face and change what those tests rasterise.
+#[test]
+fn a_prose_column_comes_back_from_the_pixel_it_is_drawn_at() {
+    let Some((gpu, _lock)) = gpu() else { return };
+    let Some(entry) = dejavu() else { return };
+    const PROSE: &str = "DejaVu Serif";
+
+    let resolved = sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor);
+    let mut font = FontContext::with_prose(entry, Some(PROSE));
+    if font.prose_family().is_none() {
+        eprintln!("skipping: {PROSE} is not installed, so there is no prose face to walk");
+        return;
+    }
+    let atlas = font.build_atlas(
+        &gpu.device,
+        &gpu.queue,
+        &resolved,
+        &ascii_charset(),
+        Rasterization::for_face(&resolved),
+    );
+    let cell = i32::from(atlas.cell.width as u16);
+    let scheme = Scheme::monochrome([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]);
+
+    // Wide letters beside narrow ones, so a column's width is a fact about
+    // its character rather than about the row.
+    let line = "Wilhelm illicit MMM iii jumps";
+    let cols = line.chars().count();
+    let mut renderer = GridRenderer::new(&gpu.device, &gpu.queue, atlas, cols, 1, scheme.clone());
+    renderer.set_scale(resolved.integer_scale);
+    // Nothing in the row to line up, so it is a prose row.
+    renderer.set_monospace_trigger(regex::Regex::new("$^").expect("a pattern matching nothing"));
+    let grid = CellGrid::from_lines(&[line], cols, 1, &scheme);
+    renderer.admit_row(&gpu.device, &gpu.queue, &mut font, &grid.cells[..cols]);
+    renderer.set_grid(&gpu.queue, &grid, None);
+
+    let scale = f64::from(resolved.integer_scale);
+    let mut varied = false;
+    for col in 0..cols - 1 {
+        let pen = renderer.pen_x(0, col);
+        let width = renderer.pen_x(0, col + 1) - pen;
+        varied |= width != cell;
+        let x = f64::from(pen) * scale;
+        assert_eq!(
+            renderer.column_side_at(0, x),
+            (col, Side::Left),
+            "column {col} of {line:?} is drawn at {x} and does not come back from it"
+        );
+        assert_eq!(
+            renderer.column_side_at(0, x + f64::from(width) * scale * 0.75),
+            (col, Side::Right),
+            "the right three quarters of column {col} of {line:?} is not its right"
+        );
+    }
+    assert!(
+        varied,
+        "every column of {line:?} came out {cell} wide, so the walk was never \
+         exercised: the row was set in the configured face, not the prose one"
     );
 }
