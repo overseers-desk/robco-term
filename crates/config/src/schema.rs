@@ -277,26 +277,24 @@ impl Default for ScreenSettings {
             line_spacing: 0.1,
             margin: 0.3,
             // The box-drawing block, a bar, a rule of three dashes or double
-            // dashes, and a run of four or more spaces that comes after text.
+            // dashes, and a run of four or more spaces with something before
+            // it on the row.
             //
-            // Why the run must come after text, and not merely after a
-            // character. A run of spaces at the head of a row is indentation.
-            // In a proportional face n spaces are n copies of one glyph, so
-            // every row indented by n starts its text at the same x whatever
-            // else is on it: indentation lines up in prose by itself, and
-            // setting those rows in the mono face would gain nothing and
-            // lose the prose. A run after a single line-initial character is
-            // the same case, a list marker (`-`, `1.`, `*`) followed by the
-            // item, and the items line up for the same reason. A run after
-            // real text is the case that needs the ruler: what precedes it
-            // is a different width on every row, so in prose the column
-            // after it lands somewhere else on every row.
+            // Why the run must have something before it. A run of spaces at
+            // the head of a row is indentation, and indentation needs no
+            // ruler: in a proportional face n spaces are n copies of one
+            // glyph, so every row indented by n starts its text at the same
+            // x by itself. Setting those rows in the mono face would gain
+            // nothing and lose the prose. A run further along the row is the
+            // case that needs the ruler, because what precedes it is a
+            // different width on every row, so in prose the column after it
+            // lands somewhere else on every row.
             //
-            // So the pattern wants two non-blank characters before the run,
-            // with anything between them: `\S.*\S {4,}`. `^\S {4,}` and
-            // `^ +\S {4,}` fall outside it on purpose, and a change that lets
-            // them in sets indented prose and lists in the mono face.
-            monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S.*\S {4,}".to_string(),
+            // That is the whole of the rule: `\S {4,}`, a run preceded by a
+            // non-space. `^ +` never matches it, which is the point. Nothing
+            // here counts characters before the run, and a rule that did
+            // would put indented prose in the mono face.
+            monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S {4,}".to_string(),
             prose_scaling: 1.2,
             blinking_cursor: false,
             frame_size: 0.1,

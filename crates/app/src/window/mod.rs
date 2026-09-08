@@ -1679,9 +1679,9 @@ impl TerminalSurface {
     /// result up from [`Viewport::margin`] instead, by way of
     /// [`Viewport::term_size`].
     /// Hand the renderer the profile's `monospace_trigger` when it has
-    /// changed. A pattern that will not compile is refused in the log and
-    /// the one in force stays, so a half-typed edit in the settings file
-    /// does not flip every row while it is being typed.
+    /// changed. A pattern that will not compile is refused out loud and
+    /// nothing is put in its place. The text is recorded either way, so the
+    /// refusal is said once per distinct value rather than once a frame.
     fn ensure_monospace_trigger(&mut self, cfg: &Config) {
         let wanted = &cfg.screen.monospace_trigger;
         if self.monospace_trigger.as_deref() == Some(wanted.as_str()) {
@@ -1691,12 +1691,10 @@ impl TerminalSurface {
         // yet applies it on the first pass that has one.
         let Some(glass) = self.glass.as_mut() else { return };
         match regex::Regex::new(wanted) {
-            Ok(trigger) => {
-                glass.renderer.set_monospace_trigger(trigger);
-                self.monospace_trigger = Some(wanted.clone());
-            }
+            Ok(trigger) => glass.renderer.set_monospace_trigger(trigger),
             Err(e) => log::error!("screen.monospace_trigger {wanted:?} is not a pattern: {e}"),
         }
+        self.monospace_trigger = Some(wanted.clone());
     }
 
     fn ensure_margin(&mut self, cfg: &Config) -> bool {
