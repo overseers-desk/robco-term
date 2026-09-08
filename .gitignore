@@ -1,6 +1,6 @@
 /target
 **/target
-/dist/
+dist/
 debian/robco-term/
 debian/.debhelper/
 debian/files
