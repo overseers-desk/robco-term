@@ -47,6 +47,8 @@ const LINES: &[&str] = &[
     "----------------------------",
     "",
     "     five spaces at the head",
+    "1.    a list item, marker first",
+    "col a    col b    col c",
 ];
 const COLS: usize = 34;
 
