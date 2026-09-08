@@ -9,6 +9,7 @@
 //! change and a resize run through the same code path.
 
 use rio_vt::crosswords::grid::Dimensions;
+use rio_vt::crosswords::pos::Side;
 
 /// The cell box a font hands us, in logical pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -79,6 +80,31 @@ impl TermSize {
             (self.cols as u16).saturating_mul(self.cell_width),
             (self.rows as u16).saturating_mul(self.cell_height),
         )
+    }
+
+    /// The column a point `x` physical pixels from the grid's left edge falls
+    /// in, and which half of that column it is on.
+    ///
+    /// The inverse of the placement the renderer draws with. It lives here
+    /// because this type holds what it needs, the column count and the
+    /// physical cell box, and because the caller has already taken the point
+    /// out of the window and into the grid.
+    ///
+    /// The side names the seam between two columns, which is what the rio
+    /// selection model anchors on: a drag begun on the right half of a
+    /// character leaves that character behind. It is read from the unclamped
+    /// point, so a press beyond the last column still reports which way it
+    /// was heading.
+    pub fn column_side_at(&self, x: f64) -> (usize, Side) {
+        let cell = f64::from(self.cell_width).max(1.0);
+        let last = self.cols.saturating_sub(1) as f64;
+        let column = (x / cell).floor().clamp(0.0, last) as usize;
+        let side = if (x / cell).fract() >= 0.5 {
+            Side::Right
+        } else {
+            Side::Left
+        };
+        (column, side)
     }
 }
 
@@ -198,6 +224,21 @@ mod tests {
         let s = v.term_size();
         assert_eq!((s.cols(), s.rows()), (80, 24));
         assert_eq!(s.pixel_size(), (800, 480));
+    }
+
+    #[test]
+    fn a_column_comes_back_from_the_pixel_it_is_drawn_at() {
+        // The renderer places column `col` at `col * cell_width`. Feeding
+        // that x back has to name `col` again, or a press lands on a
+        // different character than the one under the pointer.
+        let s = TermSize::new(80, 24, 9, 18);
+        for col in 0..s.cols() {
+            let x = (col * 9) as f64;
+            assert_eq!(s.column_side_at(x), (col, Side::Left), "column {col}");
+            assert_eq!(s.column_side_at(x + 5.0), (col, Side::Right), "column {col}");
+        }
+        // A press past the last column belongs to the last column.
+        assert_eq!(s.column_side_at(10_000.0).0, 79);
     }
 
     #[test]

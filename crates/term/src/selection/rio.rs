@@ -17,7 +17,7 @@
 //! [`super::SelectionModel`] speaks absolute lines in and out; the two
 //! conversions at the edges are the only coordinate work here.
 
-use rio_vt::crosswords::pos::{Column, Line, Pos, Side};
+use rio_vt::crosswords::pos::{Column, Line, Pos};
 use rio_vt::crosswords::Crosswords;
 use rio_vt::event::EventListener;
 use rio_vt::selection::{Selection, SelectionType};
@@ -163,21 +163,5 @@ impl Rio {
         let column = cell.0.min(self.columns.saturating_sub(1));
         let row = cell.1 as i32 - term.history_size() as i32;
         Pos::new(Line(row), Column(column))
-    }
-}
-
-/// Which half of a cell a pointer at `x` pixels is on, given the cell width.
-/// rio's model anchors on the seam between two cells, so this is what makes a
-/// drag that starts on the right half of a character leave that character
-/// behind.
-pub fn side_of(x: f64, cell_width: f64) -> Side {
-    if cell_width <= 0.0 {
-        return Side::Left;
-    }
-    let fraction = (x / cell_width).fract();
-    if fraction >= 0.5 {
-        Side::Right
-    } else {
-        Side::Left
     }
 }

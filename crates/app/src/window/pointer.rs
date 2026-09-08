@@ -110,12 +110,11 @@ impl TerminalSurface {
         let x = position.x - f64::from(self.bank_physical());
         let point = correct_distortion(x, position.y, &self.distortion_params());
         let size = self.viewport.term_size();
-        let column = (point.x / f64::from(size.cell_width)).floor();
+        let (column, side) = size.column_side_at(point.x);
         // The picture is drawn shifted up by the position's fraction of a
         // row, so a point on the glass is that much further down the grid.
         let y = point.y + f64::from(self.shift_physical());
         let row = (y / f64::from(size.cell_height)).floor();
-        let column = column.clamp(0.0, size.cols().saturating_sub(1) as f64) as usize;
         // The spare row under the last one is on the glass while the picture
         // is shifted, and a point on it is on that line.
         let last = if self.shift_physical() > 0 {
@@ -124,7 +123,6 @@ impl TerminalSurface {
             size.rows().saturating_sub(1)
         };
         let row = row.clamp(0.0, last as f64) as usize;
-        let side = term::selection::rio::side_of(point.x, f64::from(size.cell_width));
         ((column, self.top_line() + row), side)
     }
 
