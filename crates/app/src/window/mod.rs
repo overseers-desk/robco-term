@@ -491,6 +491,10 @@ pub struct TerminalSurface {
     /// The last clipped-frame report, so the log carries one line per
     /// distinct disagreement rather than one per frame.
     logged_clip: Option<(u32, u32, u32, u32, u32)>,
+    /// The `monospace_trigger` text the renderer was last handed, so a
+    /// reload that did not touch it does not recompile it or rebuild every
+    /// row. `None` until the first one is applied.
+    monospace_trigger: Option<String>,
     /// The cabinet the well is set into, or `None` for a surface that stands in
     /// no chassis at all: every headless one unless a test asks for one
     /// ([`TerminalSurface::set_cabinet`]), which is what keeps a surface with
@@ -959,6 +963,7 @@ impl TerminalSurface {
             gpu,
             channels,
             logged_clip: None,
+            monospace_trigger: None,
             banks: HashMap::new(),
             picker: None,
             find: None,
@@ -1611,6 +1616,7 @@ impl TerminalSurface {
         // the font sizing below is measured against the glass.
         self.apply_cabinet_settings(&cfg);
 
+        self.ensure_monospace_trigger(&cfg);
         let refonted = self.ensure_font(&cfg);
         let remargined = self.ensure_margin(&cfg);
         if refonted || remargined {
@@ -1671,6 +1677,27 @@ impl TerminalSurface {
     /// place that reads `distortion_margin`: the pointer path picks the
     /// result up from [`Viewport::margin`] instead, by way of
     /// [`Viewport::term_size`].
+    /// Hand the renderer the profile's `monospace_trigger` when it has
+    /// changed. A pattern that will not compile is refused in the log and
+    /// the one in force stays, so a half-typed edit in the settings file
+    /// does not flip every row while it is being typed.
+    fn ensure_monospace_trigger(&mut self, cfg: &Config) {
+        let wanted = &cfg.screen.monospace_trigger;
+        if self.monospace_trigger.as_deref() == Some(wanted.as_str()) {
+            return;
+        }
+        // Recorded only once a renderer has taken it: a surface with no glass
+        // yet applies it on the first pass that has one.
+        let Some(glass) = self.glass.as_mut() else { return };
+        match regex::Regex::new(wanted) {
+            Ok(trigger) => {
+                glass.renderer.set_monospace_trigger(trigger);
+                self.monospace_trigger = Some(wanted.clone());
+            }
+            Err(e) => log::error!("screen.monospace_trigger {wanted:?} is not a pattern: {e}"),
+        }
+    }
+
     fn ensure_margin(&mut self, cfg: &Config) -> bool {
         let margin = settings::distortion_margin(cfg) * self.viewport.scale_factor;
         if (margin - self.viewport.margin).abs() > f64::EPSILON {

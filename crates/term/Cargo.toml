@@ -45,6 +45,9 @@ ttf-parser = "0.25"
 swash = "0.2"
 
 [dev-dependencies]
+# `examples/proportional.rs` reads the shipped `monospace_trigger` off the
+# schema's default rather than restating the pattern.
+robco-config = { path = "../config" }
 serde_json = "1.0.151"
 # `tests/font_parity.rs` decodes the checked-in reference rasters.
 png = "0.18"

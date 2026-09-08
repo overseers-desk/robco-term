@@ -23,6 +23,7 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt as _;
 
 use crate::atlas::{FontContext, GlyphAtlas, Role};
+use regex::Regex;
 use crate::cells::{Cell, CellGrid, CursorShape, CursorState};
 use crate::color::{Rgba, Scheme};
 use gpu::{Gpu, Image, Target, TARGET_FORMAT};
@@ -140,40 +141,27 @@ pub struct Marked {
 ///
 /// A free function rather than a method because the row-invalidation below
 /// asks it of the *old* marking and the new one in the same breath.
-/// Whether a row has something in it to line up with the rows around it.
+/// Whether a row has something in it to line up with the rows around it:
+/// whether `trigger` matches the row's text, trailing blanks trimmed. Every
+/// row is padded to the grid's width with blanks, so the padding is not
+/// text the pattern gets to see. A tab has become spaces by the time it
+/// reaches the grid, so a pattern for runs of spaces is the pattern for
+/// tabs too.
 ///
-/// The characters that only mean anything by their column: the box-drawing
-/// block, a bar, a rule of three or more dashes or double dashes, and a run
-/// of five or more spaces, which is also what a tab has become by the time
-/// it reaches the grid. The row's trailing blanks are not a run: every row
-/// is padded to the grid's width with them.
-///
-/// A heuristic, and it errs both ways. A table row with none of these is
-/// set in prose and drifts from its rules; a sentence with a bar in it is
-/// set in the configured face. Both are cosmetic and both are visible.
-pub fn structured(cells: &[Cell]) -> bool {
+/// What the pattern says is the profile's (`screen.monospace_trigger`), and
+/// it errs both ways whatever it says. A table row it misses is set in
+/// prose and drifts from its rules; a sentence it catches is set in the
+/// configured face. Both are cosmetic and both are visible.
+pub fn structured(trigger: &Regex, cells: &[Cell]) -> bool {
     let end = cells
         .iter()
         .rposition(|cell| cell.c != ' ' && cell.c != '\0')
         .map_or(0, |i| i + 1);
-    let (mut spaces, mut rule, mut prev) = (0, 0, '\0');
-    for cell in &cells[..end] {
-        let c = cell.c;
-        if c == '|' || ('\u{2500}'..='\u{257F}').contains(&c) {
-            return true;
-        }
-        spaces = if c == ' ' { spaces + 1 } else { 0 };
-        rule = if (c == '-' || c == '=') && c == prev {
-            rule + 1
-        } else {
-            1
-        };
-        if spaces >= 5 || (rule >= 3 && (c == '-' || c == '=')) {
-            return true;
-        }
-        prev = c;
-    }
-    false
+    let text: String = cells[..end]
+        .iter()
+        .map(|cell| if cell.c == '\0' { ' ' } else { cell.c })
+        .collect();
+    trigger.is_match(&text)
 }
 
 fn marked_at(marked: Option<&Marked>, row: usize, col: usize) -> bool {
@@ -276,6 +264,11 @@ pub struct GridRenderer {
     /// this: per-line damage is a statement about one screen's own lines,
     /// and a screen that has been swapped for another damaged nothing.
     stale: bool,
+    /// What makes a row a mono row: a pattern over the row's text, from the
+    /// profile's `screen.monospace_trigger`. Until the application sets one
+    /// this matches nothing, and every row is a prose row; the application
+    /// sets it before the first frame, so that state is never drawn.
+    trigger: Regex,
     /// Whether the program below has switched to the alternate screen, which
     /// sets every row in the configured face: a full-screen program lays its
     /// picture out by column, whether or not any one row says so.
@@ -428,6 +421,7 @@ impl GridRenderer {
             marked: None,
             link: None,
             stale: false,
+            trigger: Regex::new("$^").expect("a pattern that matches nothing"),
             alt_screen: false,
             critter: Vec::new(),
             preedit: String::new(),
@@ -682,6 +676,15 @@ impl GridRenderer {
     /// advance, again the grid's own ruler. Clipped at the last column.
     /// Empty text takes the composition off the screen, which is what a commit
     /// and an abandoned composition both send.
+    /// Set what makes a row a mono row. Every row is rebuilt, because any of
+    /// them may have changed face with nothing in its cells to show for it.
+    pub fn set_monospace_trigger(&mut self, trigger: Regex) {
+        if self.trigger.as_str() != trigger.as_str() {
+            self.trigger = trigger;
+            self.stale = true;
+        }
+    }
+
     /// Tell the renderer whether the program is on its alternate screen. A
     /// change rebuilds every row, because every row's face may have changed
     /// with nothing in its cells to show for it.
@@ -845,7 +848,7 @@ impl GridRenderer {
     /// rebuild: a row is set in the face its content earns at that moment,
     /// and no flag outlives the content that set it.
     fn role_of(&self, cells: &[Cell]) -> Role {
-        if !self.atlas.prose || self.alt_screen || structured(cells) {
+        if !self.atlas.prose || self.alt_screen || structured(&self.trigger, cells) {
             Role::Mono
         } else {
             Role::Prose

@@ -144,6 +144,12 @@ pub struct ScreenSettings {
     pub font_width: f64,
     pub line_spacing: f64,
     pub margin: f64,
+    /// A regular expression over a row's text, trailing blanks trimmed. A
+    /// row it matches has something to line up with the rows around it and
+    /// is set in the configured face; a row it does not match is set in
+    /// the prose face, when a run has one. Live: an edit reaches the glass
+    /// without a rebuild.
+    pub monospace_trigger: String,
     /// Carried for schema parity with the frozen v1 shape; the cursor does
     /// not blink in this build regardless of the value (docs/config.md,
     /// `[screen]`). Wiring it is a deliberately open design fork.
@@ -263,6 +269,11 @@ impl Default for ScreenSettings {
             font_width: 1.0,
             line_spacing: 0.1,
             margin: 0.3,
+            // The box-drawing block, a bar, a rule of three dashes or double
+            // dashes, and five spaces after something that is not a space:
+            // a run at the head of a row is indentation, which lines up with
+            // its neighbours whatever face it is set in.
+            monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S {5,}".to_string(),
             blinking_cursor: false,
             frame_size: 0.1,
             screen_radius: 0.1,
