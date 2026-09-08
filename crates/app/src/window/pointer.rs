@@ -79,7 +79,6 @@ impl TerminalSurface {
     fn cell_side_at(&self, position: PhysicalPosition<f64>) -> ((usize, usize), Side) {
         let point = self.grid_point(position);
         let size = self.viewport.term_size();
-        let (column, side) = size.column_side_at(point.x);
         // The picture is drawn shifted up by the position's fraction of a
         // row, so a point on the glass is that much further down the grid.
         let y = point.y + f64::from(self.shift_physical());
@@ -92,6 +91,15 @@ impl TerminalSurface {
             size.rows().saturating_sub(1)
         };
         let row = row.clamp(0.0, last as f64) as usize;
+        // The column is the row's own question, because a prose row draws
+        // its columns at their characters' widths and only the renderer
+        // holds those. A surface with no picture has no prose face either,
+        // so the uniform division is the true answer there rather than a
+        // stand-in for one.
+        let (column, side) = match self.glass.as_ref() {
+            Some(glass) => glass.renderer.column_side_at(row, point.x),
+            None => size.column_side_at(point.x),
+        };
         ((column, self.top_line() + row), side)
     }
 
