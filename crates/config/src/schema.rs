@@ -327,6 +327,45 @@ impl Default for SshHost {
     }
 }
 
+/// The `[bindings]` table: the terminal's own chords, as the user moves
+/// them. Empty is the shipped set exactly; a row with the same key and
+/// modifiers as a shipped chord replaces it, a new trigger is added, and
+/// the later of two rows on one trigger stands. The shipped rows and the
+/// action vocabulary live in the application, which is where the actions
+/// are; this crate carries the rows as the strings the file spells them
+/// in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct BindingsSettings {
+    /// The rows, written as an array of inline tables:
+    /// `keys = [ { key = "b", with = "ctrl | shift", action = "fold_bank" } ]`.
+    pub keys: Vec<KeyBinding>,
+}
+
+/// One binding: a key, the modifiers held with it, and what it does. A row
+/// carries `action` or `esc`, one of the two.
+///
+/// Unknown fields are refused rather than dropped, unlike every other
+/// table here: a dropped field in a four-field row is a wrong binding, not
+/// a missing setting, and the file's reader keeps its last good state and
+/// logs, which is the loud answer a misspelt field wants.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct KeyBinding {
+    /// A single character, matched to the key the layout produces without
+    /// regard to case, or a named key: `pageup`, `f5`, `enter`, `digit`.
+    pub key: String,
+    /// Modifiers joined by `|`: `ctrl`, `shift`, `alt`, `super`, and
+    /// `chord` for the platform's chord modifier. Empty means none.
+    pub with: String,
+    /// An action name, or one of the two unbinds: `pass` lets the key
+    /// reach the program, `swallow` sends nothing.
+    pub action: String,
+    /// An escape sequence to write to the program in place of an action:
+    /// the bytes after the leading `ESC`, so `"[15~"` sends F5.
+    pub esc: String,
+}
+
 /// The `[serial]` table: the speed a local shell's output is taken at.
 ///
 /// Unset, a build behaves as one without any of this in it. Set, the read

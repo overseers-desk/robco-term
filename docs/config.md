@@ -270,6 +270,29 @@ port = 22
 key = ""
 ```
 
+### `[bindings]`
+
+The terminal's own chords, as `docs/controls.md` lists them, and what a
+hand that wants them elsewhere writes. Every chord in that document is a
+shipped row; a row here with the same `key` and `with` replaces it, a row
+on a new trigger adds one, and the later of two rows on one trigger stands.
+An empty table, or none, is the shipped set exactly. What bytes a key sends
+to the program is not here: that is the keytab, and a row's `esc` reaches
+the same wire.
+
+| Key | Default | What it does |
+|---|---|---|
+| `keys` | `[]` | The rows, an array of inline tables. Each carries `key`, `with`, and one of `action` or `esc`. `key` is a single character, matched to the key the layout produces and without regard to case (`"b"` and `"B"` are one binding, and on Dvorak it is the key that types a b), or a named key: `pageup`, `pagedown`, `home`, `end`, `insert`, `delete`, `enter`, `tab`, `escape`, `space`, `backspace`, `left`, `right`, `up`, `down`, `f1` to `f24`, and `digit` for any of the ten. `with` is the modifiers held, joined by `\|`: `ctrl`, `shift`, `alt`, `super`, and `chord` for the chord modifier, which is `alt` here and `super` on macOS, the one spelling that lands on the same finger everywhere; `control`, `option`, `cmd` name the same keys. Empty is no modifier. `action` names what the chord does: `new_channel`, `close_channel`, `next_channel`, `prev_channel`, `move_channel_left`, `move_channel_right`, `page_bank_up`, `page_bank_down`, `select_channel`, `store_channel`, `open_picker`, `copy`, `paste`, `open_find`, `fold_bank`, `new_window`, `close_window`; or one of the two unbinds, `pass`, which lets the key through to the program as if the terminal never had it, and `swallow`, which takes the key and sends nothing. `esc` instead writes an escape sequence to the program: the bytes after the leading `ESC`, so `"[15~"` is F5, spelled as TOML spells it (`\u001b` for a further escape byte; TOML has no `\x1b`). A row naming an unknown action, a key or modifier that does not parse, or both `action` and `esc` or neither, is logged and left out, the chord staying at its shipped meaning; a row with a field this table does not have is a parse error, and the file keeps its last good reading. |
+
+```toml
+[bindings]
+keys = [
+  { key = "b", with = "ctrl | shift", action = "fold_bank" },
+  { key = "c", with = "ctrl | shift", action = "pass" },
+  { key = "f5", esc = "[15~" },
+]
+```
+
 ### `[critters]`
 
 Every so often something drawn walks across the glass and leaves. A whale

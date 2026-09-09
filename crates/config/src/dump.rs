@@ -55,6 +55,7 @@ struct Dump {
     ssh: crate::schema::SshSettings,
     critters: crate::schema::CritterSettings,
     serial: crate::schema::SerialSettings,
+    bindings: crate::schema::BindingsSettings,
     /// What a fresh `[[ssh.host]]` row holds before the user types: the
     /// shipped `[ssh]` table has no rows, so the per-row defaults appear
     /// nowhere else in this dump.
@@ -75,6 +76,7 @@ pub fn dump(fonts: Vec<FontListing>) -> String {
         ssh: crate::schema::SshSettings::default(),
         critters: crate::schema::CritterSettings::default(),
         serial: crate::schema::SerialSettings::default(),
+        bindings: crate::schema::BindingsSettings::default(),
         ssh_host_defaults: crate::schema::SshHost::default(),
         screen_presets: crate::presets::screen_presets(),
         chassis_presets: crate::presets::chassis_presets(),

@@ -33,8 +33,9 @@ pub mod watch;
 pub use profile::Profile;
 
 pub use schema::{
-    ChannelDisplay, ChannelIndicator, ChassisSettings, CritterSettings, CritterTiming, FontSource,
-    GeneralSettings, Rasterization, ScreenSettings, SerialSettings, Shell, SshHost, SshSettings,
+    BindingsSettings, ChannelDisplay, ChannelIndicator, ChassisSettings, CritterSettings,
+    CritterTiming, FontSource, GeneralSettings, KeyBinding, Rasterization, ScreenSettings,
+    SerialSettings, Shell, SshHost, SshSettings,
 };
 
 /// Every settings table together: the shape a config file written by this
@@ -63,6 +64,7 @@ pub struct Config {
     pub ssh: SshSettings,
     pub critters: CritterSettings,
     pub serial: SerialSettings,
+    pub bindings: BindingsSettings,
 }
 
 impl Config {
@@ -161,6 +163,40 @@ mod tests {
     // explicitly: the glob above brings in this crate's own `toml` module,
     // which would otherwise win over the dependency of the same name.
     use ::toml;
+
+    #[test]
+    fn a_bindings_block_in_rio_syntax_reads_as_rows() {
+        let cfg: Config = ::toml::from_str(
+            r#"
+[bindings]
+keys = [
+  { key = "b", with = "ctrl | shift", action = "fold_bank" },
+  { key = "f5", esc = "[15~" },
+]
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.bindings.keys.len(), 2);
+        assert_eq!(cfg.bindings.keys[0].with, "ctrl | shift");
+        assert_eq!(cfg.bindings.keys[1].esc, "[15~");
+        assert_eq!(cfg.bindings.keys[1].action, "", "an absent field is empty");
+        let rows: Config = ::toml::from_str("[[bindings.keys]]\nkey = \"b\"\n").unwrap();
+        assert_eq!(rows.bindings.keys[0].key, "b", "the array-of-tables spelling reads the same");
+    }
+
+    /// A misspelt field in a four-field row is a wrong binding, not a
+    /// missing setting, so it is a parse error the reader keeps last-good
+    /// over, where every other table drops what it does not know.
+    #[test]
+    fn a_binding_row_with_an_unknown_field_is_refused() {
+        let err = ::toml::from_str::<Config>(
+            "[bindings]\nkeys = [ { key = \"b\", mods = \"ctrl\" } ]\n",
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("mods"), "{err}");
+        let lenient: Config = ::toml::from_str("[general]\nno_such_key = 1\n").unwrap();
+        assert_eq!(lenient, Config::default());
+    }
 
     #[test]
     fn the_ssh_table_fills_absent_row_keys_from_the_row_default() {
@@ -385,7 +421,7 @@ key = "/home/overseer/.ssh/id_gw"
         let mut section = String::new();
         for line in doc.lines() {
             if line.starts_with("### ") {
-                section = ["general", "screen", "chassis", "ssh", "critters", "serial"]
+                section = ["general", "screen", "chassis", "ssh", "critters", "serial", "bindings"]
                     .into_iter()
                     .find(|s| line.contains(&format!("[{s}]")))
                     .unwrap_or("")
