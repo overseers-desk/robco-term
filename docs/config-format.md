@@ -116,6 +116,12 @@ compliant writer:
   normalize as a side effect of an unrelated edit. If a human or another
   tool laid the file out a certain way, an edit to one key should not
   reformat the other nine hundred bytes of the file.
+- **Preserves the one array shape the file carries.** `[bindings]`'s
+  `keys` is a multi-line array of one inline table per line
+  ([`config.md`](config.md)). A writer that edits by lines treats each
+  element line as a row and the opener and closer as its brackets; a
+  writer that materialises a tree keeps the array's line layout and the
+  comments between rows as it keeps every other byte.
 - **Preserves unknown keys and tables.** A key your tool doesn't
   recognize is not invalid input and not your tool's to drop. It may be
   a setting introduced by a newer version of the terminal than your tool

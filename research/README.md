@@ -14,6 +14,7 @@ The folder was produced by the PLACE methodology (Poll, Landscape, Audit, Contra
 - `discussion-drivers.md`: what a terminal launch draws on Hacker News, what pulls replies, and the specific precedent for a retro CRT terminal. Dated snapshot.
 - `status.md`: RobCo Terminal's coverage of each pain with source paths and ceilings, the feature catalogue, the rarity of each capability against the field, the gaps, the known issues a reader of the code meets, and the positioning that follows. The only file written from the code.
 - `performance.md`: what an idle terminal costs, where the cost sits, what each part is worth, and the traps that make a naive re-measurement disagree.
+- `keybinding-formats.md`: how eight terminals let a user rebind the terminal's own chords, the nine decisions such a format cannot revisit once shipped, and the three places a product changed its format afterwards. Read for the `[bindings]` table's design; it sits outside the pain-number scheme, being a study of formats rather than of voiced pain.
 
 ## The pain-category numbering
 
