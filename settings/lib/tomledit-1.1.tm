@@ -5,7 +5,7 @@
 # Copyright (c) 2025 Weiwu Zhang. SPDX-License-Identifier: MIT
 
 package require Tcl 9
-package provide tomledit 1.1a1
+package provide tomledit 1.1
 
 # tomledit - TOML edits that change one key's bytes and no others.
 #

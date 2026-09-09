@@ -814,7 +814,7 @@ mod tests {
     /// line vanished is a refusal, not a silent pass-through.
     #[test]
     fn the_deb_launcher_gets_its_root_pointed_at_share() {
-        let launcher = "#!/usr/bin/env tclsh9.0\nset ROOT [file dirname [file normalize [info script]]]\nsource [file join $ROOT lib tomledit-1.1a1.tm]\n";
+        let launcher = "#!/usr/bin/env tclsh9.0\nset ROOT [file dirname [file normalize [info script]]]\nsource [file join $ROOT lib tomledit-1.1.tm]\n";
         let patched = point_root_at(launcher, "/usr/share/robco-term/settings").unwrap();
         assert!(patched.contains("set ROOT /usr/share/robco-term/settings\n"));
         assert!(!patched.contains("info script"), "{patched}");

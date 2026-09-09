@@ -68,7 +68,7 @@ proc ::selftest::check {what script} {
 # 3. The app's own Tcl-only libraries, sourced in the order the launcher
 #    sources them. A file missing from the archive fails here rather than
 #    halfway through drawing a window.
-foreach ::selftest::lib {diag.tcl tomledit-1.1a1.tm model.tcl} {
+foreach ::selftest::lib {diag.tcl tomledit-1.1.tm model.tcl} {
     ::selftest::check "lib/$::selftest::lib sources" [format {
         source [file join $::selftest::root lib %s]
         expr {1}
