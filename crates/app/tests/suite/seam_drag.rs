@@ -212,6 +212,35 @@ fn a_hidden_chassis_has_no_seam_and_no_column() {
 }
 
 #[test]
+fn a_fold_gives_the_well_the_whole_window_and_an_unfold_the_bank_back() {
+    let mut surface = surface();
+    surface.set_cabinet(cabinet(&Config::default()));
+    assert_eq!(surface.cabinet().unwrap().bank_width(), STOCK_BANK);
+
+    assert!(surface.toggle_bank_fold());
+    let bank = surface.cabinet().unwrap();
+    assert!(bank.is_folded());
+    assert!(!bank.is_shown());
+    assert_eq!(bank.bank_width(), 0);
+    assert_eq!(bank.layout().crt.width, f64::from(WINDOW_W));
+    assert_eq!(bank.min_inner_size(), WELL_MINIMUM);
+    // A drag where the seam stood moves nothing while the bank is folded.
+    drag(&mut surface, f64::from(STOCK_BANK), 400.0);
+    assert_eq!(surface.cabinet().unwrap().bank_width(), 0);
+
+    assert!(surface.toggle_bank_fold());
+    let bank = surface.cabinet().unwrap();
+    assert!(!bank.is_folded());
+    assert_eq!(bank.bank_width(), STOCK_BANK);
+}
+
+#[test]
+fn a_fold_with_no_cabinet_declines() {
+    let mut surface = surface();
+    assert!(!surface.toggle_bank_fold());
+}
+
+#[test]
 fn a_drag_with_no_settings_moves_the_bank_and_writes_nothing() {
     // `--default-settings` is the contract's "never touch the user's real
     // config" switch, and a surface run under it has no handle at all. The

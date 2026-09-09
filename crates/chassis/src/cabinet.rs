@@ -180,6 +180,11 @@ pub struct Cabinet {
     layout: WindowLayout,
     well_minimum: (i32, i32),
     seam: SeamDrag,
+    /// The bank folded away by a chord: the well takes the whole window
+    /// and nothing of the bank is drawn, measured or hit, the same cabinet
+    /// standing around the glass. This window's runtime state, like
+    /// fullscreen, and no setting: a reload leaves it where it is.
+    folded: bool,
     /// The last furniture built and what it was built from. The bank is a
     /// nameplate over a column of channel windows: it changes when a channel
     /// does, or when the window is resized, and not on the twenty frames a
@@ -205,7 +210,8 @@ impl Cabinet {
             crate::layout::MINIMUM_HEIGHT,
         );
         let geometry = Self::measure(cfg, &shell, &display, width, f64::from(well_minimum.0));
-        let layout = WindowLayout::new(width, height, Self::footprint(cfg, &geometry));
+        let layout =
+            WindowLayout::new(width, height, Self::footprint(cfg.general.chassis_shown, &geometry));
         Cabinet {
             cfg: cfg.clone(),
             display,
@@ -216,6 +222,7 @@ impl Cabinet {
             layout,
             well_minimum,
             seam: SeamDrag::new(),
+            folded: false,
             remembered: std::cell::RefCell::new(None),
         }
     }
@@ -264,15 +271,35 @@ impl Cabinet {
         }
     }
 
-    /// The bank's footprint, zero when no bank stands. A hidden chassis is
-    /// not a bank of no width; it is no bank, and the well takes the whole
-    /// window.
-    fn footprint(cfg: &Config, geometry: &BankGeometry) -> f64 {
-        if cfg.general.chassis_shown {
+    /// The bank's footprint, zero when no bank stands. A hidden chassis, or
+    /// a folded bank, is not a bank of no width; it is no bank, and the well
+    /// takes the whole window.
+    fn footprint(stands: bool, geometry: &BankGeometry) -> f64 {
+        if stands {
             geometry.implicit_width as f64
         } else {
             0.0
         }
+    }
+
+    /// Whether a bank stands beside the well: the chassis is drawn and the
+    /// bank is not folded. The one predicate every measure, draw and hit
+    /// test of the bank turns on.
+    fn bank_stands(&self) -> bool {
+        self.cfg.general.chassis_shown && !self.folded
+    }
+
+    /// Fold the bank away, or bring it back at its configured count.
+    /// Returns the bank width to hand `Shell::set_bank_width`, as a settings
+    /// reload does.
+    pub fn set_folded(&mut self, folded: bool) -> u32 {
+        self.folded = folded;
+        self.remeasure();
+        self.bank_width()
+    }
+
+    pub fn is_folded(&self) -> bool {
+        self.folded
     }
 
     /// A settings reload, or a display kit re-measured after a font change.
@@ -324,7 +351,7 @@ impl Cabinet {
         self.layout = WindowLayout::new(
             window_width,
             self.layout.bank.height,
-            Self::footprint(&self.cfg, &self.geometry),
+            Self::footprint(self.bank_stands(), &self.geometry),
         );
     }
 
@@ -380,7 +407,7 @@ impl Cabinet {
     /// window the user had narrowed, `Shell` growing the window to meet a
     /// hint it had just raised.
     pub fn min_bank_width(&self) -> u32 {
-        if !self.cfg.general.chassis_shown {
+        if !self.bank_stands() {
             return 0;
         }
         let least = self
@@ -411,9 +438,10 @@ impl Cabinet {
         &self.layout
     }
 
-    /// Whether the chassis is drawn at all.
+    /// Whether a bank is drawn at all: the chassis shown and the bank
+    /// unfolded. The bezel is not this question; it reads the profile.
     pub fn is_shown(&self) -> bool {
-        self.cfg.general.chassis_shown
+        self.bank_stands()
     }
 
     /// The uniforms for the bezel over the screen well.
@@ -554,7 +582,7 @@ impl Cabinet {
             well_minimum_width: f64::from(self.well_minimum.0),
             bank_width: self.layout.bank.width,
         };
-        let shown = self.cfg.general.chassis_shown;
+        let shown = self.bank_stands();
         let chars = self.seam.pointer_moved(x, &ctx, shown)?;
         // Take the new count on the spot. The settings write is the host's, and
         // the reload that follows it is a round trip: measuring the next motion
@@ -594,6 +622,28 @@ mod tests {
         assert_eq!(c.min_inner_size(), (474, 240));
         assert_eq!(c.frame_params().len(), 36);
         assert_eq!(c.chassis_params().field_scale, [184.0 / 840.0, 1.0]);
+    }
+
+    #[test]
+    fn a_folded_bank_is_no_bank_until_it_comes_back() {
+        let mut c = stock();
+        assert_eq!(c.set_folded(true), 0);
+        assert!(!c.is_shown());
+        assert_eq!(c.layout().crt.width, 1024.0);
+        assert_eq!(c.min_inner_size(), (320, 240));
+        assert!(!c.pointer_pressed(184.0));
+        assert_eq!(c.cursor_moved(300.0), None);
+        // The profile still says the chassis is shown: the fold is this
+        // window's, and a reload of the same profile leaves it folded.
+        assert_eq!(
+            c.apply_settings(&Config::default(), Display::Led(LedMetrics::default())),
+            0
+        );
+        assert!(c.is_folded());
+        assert_eq!(c.set_folded(false), 184);
+        assert!(c.is_shown());
+        assert_eq!(c.layout().crt.width, 840.0);
+        assert_eq!(c.min_inner_size(), (474, 240));
     }
 
     #[test]

@@ -128,6 +128,21 @@ impl TerminalSurface {
         self.cabinet.as_ref().is_some_and(|c| c.is_shown())
     }
 
+    /// The bank folds away and the well takes the whole window, or it
+    /// comes back at its configured count. This window's runtime state,
+    /// like fullscreen: no setting is written, and a reload leaves it as it
+    /// stands. Answers whether there was a cabinet to fold.
+    pub fn toggle_bank_fold(&mut self) -> bool {
+        let Some(cabinet) = self.cabinet.as_mut() else {
+            return false;
+        };
+        let folded = !cabinet.is_folded();
+        cabinet.set_folded(folded);
+        self.relayout();
+        self.announce_bank_width();
+        true
+    }
+
     /// `Alt+PgUp` / `Alt+PgDown`: within one bank's stretch the pager views
     /// a page without stealing the air; landing on another bank's stretch
     /// brings back the channel that bank last had on the air
