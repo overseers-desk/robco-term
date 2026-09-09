@@ -408,6 +408,28 @@ test guard-15.2 {reading an unsafe file still works} -constraints realBinary -se
     ::rcsettings::model::effective general font_scaling
 } -result 1.5
 
+# The bindings table is written in Rio's syntax, a multi-line array of
+# inline tables, the one shape of that kind the editor admits. A file
+# carrying it stays editable, and the block stands byte for byte.
+set ::bindings_block "\[bindings\]\nkeys = \[\n  { key = \"b\", with = \"ctrl | shift\", action = \"fold_bank\" },\n  { key = \"c\", with = \"ctrl | shift\", action = \"pass\" },\n\]\n"
+
+test guard-15.3 {a file carrying a bindings block is edited beside it} -constraints realBinary -setup {
+    set before [with_config "\[general\]\nfont_scaling = 1.5\n\n$::bindings_block"]
+} -body {
+    ::rcsettings::model::set_value general font_scaling 1.2
+    list [surgery $before [on_disk]] \
+        [string equal [string range [on_disk] end-[expr {[string length $::bindings_block] - 1}] end] \
+            $::bindings_block]
+} -result {{{{font_scaling = 1.5}} {{font_scaling = 1.2}}} 1}
+
+test guard-15.4 {a binding row is addressable through the editor the window uses} -constraints realBinary -setup {
+    set before [with_config "\[general\]\nfont_scaling = 1.5\n\n$::bindings_block"]
+} -body {
+    list [::tomledit::count [on_disk] bindings.keys] \
+        [::tomledit::plain [::tomledit::get [on_disk] {bindings.keys[1].action}]] \
+        [surgery $before [::tomledit::put [on_disk] {bindings.keys[1].action} {"swallow"}]]
+} -result {2 pass {{{  { key = "c", with = "ctrl | shift", action = "pass" },}} {{  { key = "c", with = "ctrl | shift", action = "swallow" },}}}}
+
 test path-7.1 {the platform's default config path} -body {
     set saved [array get ::env XDG_CONFIG_HOME]
     set ::env(XDG_CONFIG_HOME) [file join / xdg]

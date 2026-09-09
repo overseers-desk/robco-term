@@ -21,7 +21,7 @@
 
 package require Tcl 9.0
 
-source [file join [file dirname [info script]] tomledit-1.0.tm]
+source [file join [file dirname [info script]] tomledit-1.1a1.tm]
 
 namespace eval ::rcsettings::model {
     namespace export init load path set_path text reload \

@@ -5,7 +5,7 @@
 # Copyright (c) 2025 Weiwu Zhang. SPDX-License-Identifier: MIT
 
 package require Tcl 9
-package provide tomledit 1.0
+package provide tomledit 1.1a1
 
 # tomledit - TOML edits that change one key's bytes and no others.
 #
@@ -32,8 +32,8 @@ package provide tomledit 1.0
 #   tomledit::get text path ?fallback? -> raw value
 #   tomledit::put text path value -> text   (value pre-formatted, see format_value)
 #   tomledit::del text path -> text         (a key's line, or a whole row)
-#   tomledit::add text name kvlist -> text  (a new [[name]] row)
-#   tomledit::count text name -> how many [[name]] rows
+#   tomledit::add text name kvlist ?shape? -> text  (a new row; see below)
+#   tomledit::count text name -> how many rows name has
 #   tomledit::ensure_table text table ?above? -> text
 #   tomledit::parse text -> dict {tables {t {k rawvalue ...}} arrays {n {row ...}}}
 #   tomledit::type_of raw -> string|bool|int|float
@@ -43,13 +43,26 @@ package provide tomledit 1.0
 #   tomledit::read_file path -> text ("" when absent)
 #   tomledit::atomic_write path text
 #
-# The subset: flat scalar values in named tables, plus arrays of tables
-# (`[[name]]`) whose rows are themselves flat, so a row is a span of lines
-# and a row's key is a scalar inside that span. Values are raw TOML text on
+# The subset: flat scalar values in named tables, plus two shapes of row.
+# An array of tables (`[[name]]`) has rows that are themselves flat, so a
+# row is a span of lines and a row's key is a scalar inside that span. An
+# inline-row array is a key whose value opens `[` on its own line, holds
+# one inline table per line, and closes on a line of `]`:
+#
+#     keys = [
+#       { key = "b", with = "ctrl | shift", action = "fold_bank" },
+#     ]
+#
+# There a row is the span of one line and a row's key is a scalar inside
+# the braces. Both shapes answer to the same paths, `name[i].key` and
+# `name[i]`, `name` being `table.key` for the inline shape; `add` follows
+# the shape the document already has and takes `inline` as its optional
+# last argument for an array it has to create. Values are raw TOML text on
 # the way in and out of parse/get - quoting intact - so an edited value
 # can be formatted after the type of the value it replaces (type_of,
 # format_value) and unquoted only where displayed (plain). A document using
-# TOML beyond the subset (multiline strings, dotted keys, inline tables)
+# TOML beyond the subset (multiline strings, dotted keys, an inline table
+# as a plain value, a multiline array of anything but inline-table rows)
 # can fool a line-oriented span finder - a multiline string may hold a line
 # shaped like a header, and an edit would land inside the string - so a
 # writer asks `unsafe` first and refuses rather than guessing: a refused
@@ -124,13 +137,15 @@ namespace eval ::tomledit {
         }
     }
 
-    # A new [[name]] row carrying $kvlist, a flat list of keys and
+    # A new row of $name carrying $kvlist, a flat list of keys and
     # pre-formatted values; rows are addressed, never pathed into being.
-    proc add {text name kvlist} {
-        return [append_array_row $text $name $kvlist]
+    # The row takes the shape $name already has in the document; $shape,
+    # `header` or `inline`, decides only for an array being created.
+    proc add {text name kvlist {shape header}} {
+        return [append_array_row $text $name $kvlist $shape]
     }
 
-    # How many [[name]] rows the document holds.
+    # How many rows $name holds, of either shape.
     proc count {text name} {
         return [llength [array_spans $text $name]]
     }
@@ -204,8 +219,9 @@ namespace eval ::tomledit {
     }
 
     # Parse into a dict: tables -> dict key -> raw value. A `[[name]]`
-    # header appends a fresh dict to the list under arrays -> name.
-    # Multi-line arrays are joined before parsing.
+    # header appends a fresh dict to the list under arrays -> name, and
+    # each row of an inline-row array appends one under arrays ->
+    # table.key. Other multi-line arrays are joined before parsing.
     # Returns dict with keys: tables, arrays.
     proc parse {text} {
         lassign [lines $text] all trailing
@@ -215,9 +231,26 @@ namespace eval ::tomledit {
         set mode table
         set pending ""
         set joined {}
+        set skip [dict create]
+        dict for {name info} [scan_inline $all] {
+            lassign $info open close rows
+            for {set i $open} {$i <= $close} {incr i} { dict set skip $i 1 }
+            foreach i $rows {
+                set line [lindex $all $i]
+                set row [dict create]
+                foreach pair [inline_pairs $line] {
+                    lassign $pair key kstart start end
+                    dict set row $key [string range $line $start $end]
+                }
+                dict lappend arrays $name $row
+            }
+        }
         # Join multi-line array values first: a value opening more brackets
         # than it closes absorbs following lines until balanced.
+        set i -1
         foreach line $all {
+            incr i
+            if {[dict exists $skip $i]} { continue }
             if {$pending ne ""} {
                 append pending " " [string trim $line]
                 if {[balanced $pending]} {
@@ -290,9 +323,15 @@ namespace eval ::tomledit {
     # refusable here, and a writer asks this before its first edit.
     proc unsafe {text} {
         lassign [lines $text] all trailing
+        set skip [dict create]
+        dict for {name info} [scan_inline $all] {
+            lassign $info open close rows
+            for {set i $open} {$i <= $close} {incr i} { dict set skip $i 1 }
+        }
         set n 0
         foreach line $all {
             incr n
+            if {[dict exists $skip [expr {$n - 1}]]} { continue }
             if {[string first {"""} $line] >= 0 \
                     || [string first {'''} $line] >= 0} {
                 return "line $n holds a multiline string delimiter"
@@ -428,6 +467,12 @@ namespace eval ::tomledit {
     }
 
     proc spans_in {all name} {
+        set inline [scan_inline $all]
+        if {[dict exists $inline $name]} {
+            return [lmap i [lindex [dict get $inline $name] 2] {
+                list $i [expr {$i + 1}]
+            }]
+        }
         set spans {}
         set start -1
         for {set i 0} {$i < [llength $all]} {incr i} {
@@ -451,9 +496,17 @@ namespace eval ::tomledit {
         set spans [spans_in $all $name]
         if {![string is integer -strict $index] || $index < 0
             || $index >= [llength $spans]} {
-            error "no \[\[$name\]\] row at index $index"
+            error "no row of $name at index $index"
         }
         return [lindex $spans $index]
+    }
+
+    # Which shape $name takes in the document: `inline`, `header`, or {}
+    # when it holds no such array.
+    proc array_shape {all name} {
+        if {[dict exists [scan_inline $all] $name]} { return inline }
+        if {[llength [spans_in $all $name]] > 0} { return header }
+        return {}
     }
 
     # Set the pre-formatted value of $key inside row $index of $name: the
@@ -462,6 +515,11 @@ namespace eval ::tomledit {
     proc set_array_key {text name index key value} {
         lassign [lines $text] all trailing
         lassign [row_span $all $name $index] start end
+        if {[array_shape $all $name] eq "inline"} {
+            set all [lreplace $all $start $start \
+                [inline_set [lindex $all $start] $key $value]]
+            return [join_lines $all $trailing]
+        }
         set body [expr {$start + 1}]
         for {set i $body} {$i < $end} {incr i} {
             set line [lindex $all $i]
@@ -478,6 +536,11 @@ namespace eval ::tomledit {
     proc unset_array_key {text name index key} {
         lassign [lines $text] all trailing
         lassign [row_span $all $name $index] start end
+        if {[array_shape $all $name] eq "inline"} {
+            set all [lreplace $all $start $start \
+                [inline_unset [lindex $all $start] $key]]
+            return [join_lines $all $trailing]
+        }
         for {set i [expr {$start + 1}]} {$i < $end} {incr i} {
             if {[key_of [lindex $all $i]] ne $key} { continue }
             set all [lreplace $all $i $i]
@@ -486,14 +549,20 @@ namespace eval ::tomledit {
         return $text
     }
 
-    # A new `[[$name]]` block carrying $kvlist, a flat list of keys and
-    # pre-formatted values. It goes after the last row there is, or after
-    # the parent table's span when there are no rows yet, or at the end of
-    # the document when there is neither. One blank line separates it from
-    # whatever it follows, so a file of rows reads as a list.
-    proc append_array_row {text name kvlist} {
+    # A new row of $name carrying $kvlist, a flat list of keys and
+    # pre-formatted values, in the shape the document gives $name, or in
+    # $shape when it has none. A `[[$name]]` block goes after the last row
+    # there is, or after the parent table's span when there are no rows
+    # yet, or at the end of the document when there is neither; one blank
+    # line separates it from whatever it follows, so a file of rows reads
+    # as a list. An inline row goes on the line above the closing `]`.
+    proc append_array_row {text name kvlist {shape header}} {
         lassign [lines $text] all trailing
         if {[llength $all] == 1 && [lindex $all 0] eq ""} { set all {} }
+        set have [array_shape $all $name]
+        if {$have eq "inline" || ($have eq "" && $shape eq "inline")} {
+            return [join_lines [inline_append $all $name $kvlist] $trailing]
+        }
         set spans [spans_in $all $name]
         if {[llength $spans] > 0} {
             lassign [lindex $spans end] start end
@@ -537,6 +606,9 @@ namespace eval ::tomledit {
     proc remove_array_row {text name index} {
         lassign [lines $text] all trailing
         lassign [row_span $all $name $index] start end
+        if {[array_shape $all $name] eq "inline"} {
+            return [join_lines [lreplace $all $start $start] $trailing]
+        }
         while {$end > $start + 1 && [string match "#*" \
                 [string trim [lindex $all [expr {$end - 1}]]]]} {
             incr end -1
@@ -547,6 +619,186 @@ namespace eval ::tomledit {
             set all [lreplace $all [expr {$start - 1}] [expr {$start - 1}]]
         }
         return [join_lines $all $trailing]
+    }
+
+    # ------------------------------------------------ inline-row arrays --
+    #
+    # The second repeating shape: a key whose value opens `[` on its own
+    # line, holds one inline table per line, and closes on a line of `]`.
+    # A row is the span of one line, and a row's key is a scalar inside
+    # the braces, so the surgery stays what it is everywhere else: a path
+    # names a line, and an edit moves that line's bytes. A blank or comment
+    # line between rows is kept and is not a row. Anything else inside the
+    # brackets (a scalar element, a table spread over lines, an empty
+    # table, a nested array) is not this shape, and the array is left to
+    # `unsafe` to refuse as the multiline array it is.
+
+    # Every inline-row array in the document, as a dict from the array's
+    # name (`table.key`, or the bare key above the first header) to {open
+    # close rows}: the line indices of the opener, the closer and each row.
+    # Only a plain table holds one; a `[[name]]` row does not.
+    proc scan_inline {all} {
+        set found [dict create]
+        set current ""
+        set plain 1
+        set n [llength $all]
+        for {set i 0} {$i < $n} {incr i} {
+            set line [lindex $all $i]
+            set h [header_of $line]
+            if {$h ne {}} {
+                lassign $h kind current
+                set plain [expr {$kind eq "table"}]
+                continue
+            }
+            if {!$plain} { continue }
+            set key [key_of $line]
+            if {$key eq "" || [value_of $line] ne "\["} { continue }
+            set rows {}
+            set close -1
+            for {set j [expr {$i + 1}]} {$j < $n} {incr j} {
+                set body [string trim [lindex $all $j]]
+                if {$body eq "" || [string match "#*" $body]} { continue }
+                if {[regexp {^\]\s*(?:#.*)?$} $body]} { set close $j; break }
+                if {[inline_pairs [lindex $all $j]] eq {}} { break }
+                lappend rows $j
+            }
+            if {$close < 0} { continue }
+            set name [expr {$current eq "" ? $key : "$current.$key"}]
+            dict set found $name [list $i $close $rows]
+            set i $close
+        }
+        return $found
+    }
+
+    # The pairs of an inline-table row line, each as {key kstart vstart
+    # vend}: where the key begins and the character span of its value,
+    # quoting honoured as value_of honours it. {} when the line is not one
+    # inline table holding at least one pair, followed by nothing but an
+    # optional comma and comment.
+    proc inline_pairs {line} {
+        set n [string length $line]
+        set i 0
+        while {$i < $n && [string is space [string index $line $i]]} { incr i }
+        if {[string index $line $i] ne "\{"} { return {} }
+        incr i
+        set pairs {}
+        while {1} {
+            while {$i < $n && [string is space [string index $line $i]]} { incr i }
+            if {[string index $line $i] eq "\}"} { break }
+            if {[llength $pairs] > 0} {
+                if {[string index $line $i] ne ","} { return {} }
+                incr i
+                while {$i < $n && [string is space [string index $line $i]]} { incr i }
+                if {[string index $line $i] eq "\}"} { break }
+            }
+            if {![regexp {^[A-Za-z0-9_-]+} [string range $line $i end] key]} {
+                return {}
+            }
+            set kstart $i
+            incr i [string length $key]
+            while {$i < $n && [string is space [string index $line $i]]} { incr i }
+            if {[string index $line $i] ne "="} { return {} }
+            incr i
+            while {$i < $n && [string is space [string index $line $i]]} { incr i }
+            set rest [string range $line $i end]
+            switch -exact -- [string index $rest 0] {
+                "\"" { set ok [regexp {^"(?:[^"\\]|\\.)*"} $rest value] }
+                "'"  { set ok [regexp {^'[^']*'} $rest value] }
+                default { set ok [regexp {^[^,\}\s#]+} $rest value] }
+            }
+            if {!$ok} { return {} }
+            lappend pairs [list $key $kstart $i [expr {$i + [string length $value] - 1}]]
+            incr i [string length $value]
+        }
+        if {[llength $pairs] == 0} { return {} }
+        if {![regexp {^\s*,?\s*(?:#.*)?$} [string range $line [expr {$i + 1}] end]]} {
+            return {}
+        }
+        return $pairs
+    }
+
+    # The row line with $key's value replaced by $value, its spacing and
+    # anything after the closing brace kept. An absent key is added as the
+    # last pair, spaced the way the row spaces its brace.
+    proc inline_set {line key value} {
+        set pairs [inline_pairs $line]
+        foreach pair $pairs {
+            lassign $pair k kstart start end
+            if {$k ne $key} { continue }
+            return [string replace $line $start $end $value]
+        }
+        set last [lindex [lindex $pairs end] 3]
+        set close [string first "\}" $line [expr {$last + 1}]]
+        set before [string range $line 0 [expr {$close - 1}]]
+        set pad [expr {[string index $before end] eq " " ? " " : ""}]
+        set before [string trimright $before]
+        set sep [expr {[string index $before end] eq "," ? "" : ","}]
+        return "$before$sep $key = $value$pad[string range $line $close end]"
+    }
+
+    # The row line without $key's pair and the separator that joined it to
+    # its neighbour. An absent key is the line unchanged. The last pair of
+    # a row is not removed, since a row holding no key names nothing: take
+    # the row instead.
+    proc inline_unset {line key} {
+        set pairs [inline_pairs $line]
+        set at [lsearch -index 0 -exact $pairs $key]
+        if {$at < 0} { return $line }
+        if {[llength $pairs] == 1} {
+            error "a row keeps at least one key; remove the row instead"
+        }
+        lassign [lindex $pairs $at] k kstart start end
+        if {$at > 0} {
+            set prev [lindex [lindex $pairs [expr {$at - 1}]] 3]
+            return [string replace $line [expr {$prev + 1}] $end ""]
+        }
+        set next [lindex [lindex $pairs 1] 1]
+        return [string replace $line $kstart [expr {$next - 1}] ""]
+    }
+
+    # The lines with a new inline row of $name carrying $kvlist, on the
+    # line above the closing `]`, indented as the last row is (or one step
+    # in from the opener when there is none). A last row lacking its
+    # trailing comma gains one, the one edit outside the new line TOML
+    # requires. An absent array is opened at the end of its parent table's
+    # span, the table itself written when the document lacks it.
+    proc inline_append {all name kvlist} {
+        set inline [scan_inline $all]
+        if {![dict exists $inline $name]} {
+            set parent [parent_of $name]
+            set key [string range $name [expr {[string length $parent] + 1}] end]
+            if {$parent eq ""} {
+                set key $name
+                set at 0
+                while {$at < [llength $all]
+                       && [header_of [lindex $all $at]] eq {}} { incr at }
+            } else {
+                set all [lindex [lines [ensure_table [join_lines $all 1] $parent]] 0]
+                lassign [table_span $all $parent] start end
+                set at [append_at $all $start $end]
+            }
+            set all [linsert $all $at "$key = \[" "\]"]
+            set inline [scan_inline $all]
+        }
+        lassign [dict get $inline $name] open close rows
+        if {[llength $rows] > 0} {
+            set last [lindex $rows end]
+            set line [lindex $all $last]
+            regexp {^\s*} $line indent
+            set tail [lindex [inline_pairs $line] end]
+            set brace [string first "\}" $line [expr {[lindex $tail 3] + 1}]]
+            if {![regexp {^\s*,} [string range $line [expr {$brace + 1}] end]]} {
+                set all [lreplace $all $last $last \
+                    [string replace $line $brace $brace "\},"]]
+            }
+        } else {
+            regexp {^\s*} [lindex $all $open] indent
+            append indent "  "
+        }
+        set fields {}
+        foreach {key value} $kvlist { lappend fields "$key = $value" }
+        set row "$indent\{ [join $fields ", "] \},"
+        return [linsert $all $close $row]
     }
 
     # Give $table a header if it has none, and answer with the document
