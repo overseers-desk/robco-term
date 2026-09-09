@@ -34,17 +34,23 @@ use std::time::{Duration, Instant};
 
 use winit::keyboard::ModifiersState;
 
-/// Whether the chord modifier is held: Alt everywhere but macOS, where the
-/// Alt key composes text and Meta is the one a shortcut may take.
+/// The chord modifier: Alt everywhere but macOS, where the Alt key
+/// composes text and Meta is the one a shortcut may take.
 ///
-/// The one place that rule is written. The keyboard reads it to route a
-/// digit, and the modifier-change edge reads it to commit on the release.
-pub fn modifier_down(modifiers: ModifiersState) -> bool {
+/// The one place that rule is written. The bindings table spells it
+/// `chord`, so a shipped row reads the same on every platform; the
+/// modifier-change edge reads it to commit a digit chord on the release.
+pub fn modifier_mask() -> ModifiersState {
     if cfg!(target_os = "macos") {
-        modifiers.super_key()
+        ModifiersState::SUPER
     } else {
-        modifiers.alt_key()
+        ModifiersState::ALT
     }
+}
+
+/// Whether the chord modifier is held.
+pub fn modifier_down(modifiers: ModifiersState) -> bool {
+    modifiers.contains(modifier_mask())
 }
 
 /// Commits the chord if the modifier release is never observed.

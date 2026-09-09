@@ -11,6 +11,9 @@
 //! typed byte snaps to the bottom; and `channels`, whose session takes the
 //! bytes.
 
+use crate::bindings::{Action, Bound};
+use crate::instance::NewWindow;
+use crate::shell::ShellEvent;
 use winit::keyboard::ModifiersState;
 
 use crate::clipboard;
@@ -179,86 +182,103 @@ impl TerminalSurface {
         }
     }
 
-    /// The window-level shortcuts, which run before the keytab. Answers
+    /// The window-level chords, which run before the keytab. Answers
     /// whether the key was one of them.
     ///
-    /// | key | handler |
-    /// |---|---|
-    /// | `Ctrl+Shift+C` | [`Self::copy_selection`] |
-    /// | `Ctrl+Shift+F` | [`Self::open_find`] |
-    /// | `Ctrl+Shift+V` | [`Self::paste_from`] |
-    /// | `Ctrl+Shift+T` | [`Self::new_channel`] |
-    /// | `Ctrl+Shift+W` | [`Self::close_channel`] |
-    /// | `Ctrl+Shift+Left/Right` | [`Self::move_channel`] |
-    /// | `Ctrl+PgUp/PgDown` | [`Self::cycle_channel`] |
-    /// | `Alt+PgUp/PgDown` | [`Self::step_bank`] |
-    /// | `Alt+<digit>` | [`Self::chord_digit`] (select) |
-    /// | `Alt+Shift+<digit>` | [`Self::chord_digit`] (store) |
-    /// | `Alt+Shift+T` | [`Self::open_picker`] |
-    ///
-    /// The clipboard pair, the find line and the tab-moving arrows are the
-    /// chords Konsole and GNOME Terminal both put here, so a hand arriving
-    /// from either finds them where it left them.
-    ///
-    /// `Ctrl+Shift+N`/`Q` and `F11` are the *shell*'s (a window, not a
-    /// channel) and never reach here; [`crate::shell`] takes them first.
+    /// Which key does what is data, [`crate::bindings`]: the shipped set is
+    /// `docs/controls.md`, and the config file's `[bindings]` rows lay over
+    /// it. `F11` alone is the shell's (a window, not a channel), read off
+    /// the physical key whatever is held, and never reaches here.
     fn shortcut_key(&mut self, logical: &winit::keyboard::Key, modifiers: ModifiersState) -> bool {
-        use winit::keyboard::{Key, NamedKey};
+        match self.bindings.lookup(logical, modifiers).cloned() {
+            None | Some(Bound::Pass) => false,
+            Some(Bound::Swallow) => true,
+            Some(Bound::Esc(bytes)) => {
+                self.type_bytes(&bytes);
+                true
+            }
+            Some(Bound::Action(action)) => self.run_action(action, logical),
+        }
+    }
 
-        let ctrl = modifiers.control_key();
-        let shift = modifiers.shift_key();
-        let chord_mod = crate::chord::modifier_down(modifiers);
-
-        match logical {
-            Key::Named(NamedKey::PageUp) if chord_mod => self.step_bank(-1),
-            Key::Named(NamedKey::PageDown) if chord_mod => self.step_bank(1),
-            Key::Named(NamedKey::PageUp) if ctrl && !shift => {
+    /// Answers whether the action took the key. An action may decline, and
+    /// a declined action is as if the key were unbound: the press continues
+    /// down the chain to the keytab, so `Alt+PageUp` with no bank drawn
+    /// still reaches the program as its own escape, and a window key with
+    /// no shell to send it to reaches the program the same way. The digit
+    /// chords keep `chord_digit`'s side effect of arming the release edge.
+    fn run_action(&mut self, action: Action, logical: &winit::keyboard::Key) -> bool {
+        use winit::keyboard::Key;
+        match action {
+            Action::SelectChannel | Action::StoreChannel => {
+                let Key::Character(c) = logical else {
+                    return false;
+                };
+                let Some(&digit) = c.as_bytes().first() else {
+                    return false;
+                };
+                self.chord_digit(digit, action == Action::StoreChannel)
+            }
+            Action::PageBankUp => self.step_bank(-1),
+            Action::PageBankDown => self.step_bank(1),
+            Action::PrevChannel => {
                 self.cycle_channel(-1);
                 true
             }
-            Key::Named(NamedKey::PageDown) if ctrl && !shift => {
+            Action::NextChannel => {
                 self.cycle_channel(1);
                 true
             }
-            Key::Character(c) if chord_mod && is_digit(c) => {
-                self.chord_digit(c.as_bytes()[0], shift)
-            }
-            // The destination picker: the owner's chord, chosen over the
-            // desktop-grabbed Ctrl+Alt+T (#14).
-            Key::Character(c) if chord_mod && shift && c.eq_ignore_ascii_case("t") => {
-                self.open_picker();
-                true
-            }
-            Key::Named(NamedKey::ArrowLeft) if ctrl && shift => {
+            Action::MoveChannelLeft => {
                 self.move_channel(-1);
                 true
             }
-            Key::Named(NamedKey::ArrowRight) if ctrl && shift => {
+            Action::MoveChannelRight => {
                 self.move_channel(1);
                 true
             }
-            Key::Character(c) if ctrl && shift && c.eq_ignore_ascii_case("t") => {
+            Action::NewChannel => {
                 self.new_channel();
                 true
             }
-            Key::Character(c) if ctrl && shift && c.eq_ignore_ascii_case("w") => {
+            Action::CloseChannel => {
                 self.close_channel();
                 true
             }
-            Key::Character(c) if ctrl && shift && c.eq_ignore_ascii_case("c") => {
+            Action::OpenPicker => {
+                self.open_picker();
+                true
+            }
+            Action::Copy => {
                 self.copy_selection();
                 true
             }
-            Key::Character(c) if ctrl && shift && c.eq_ignore_ascii_case("f") => {
-                self.open_find();
-                true
-            }
-            Key::Character(c) if ctrl && shift && c.eq_ignore_ascii_case("v") => {
+            Action::Paste => {
                 self.paste_from(clipboard::Target::Clipboard, false);
                 true
             }
-            _ => false,
+            Action::OpenFind => {
+                self.open_find();
+                true
+            }
+            Action::FoldBank => self.toggle_bank_fold(),
+            Action::NewWindow => self.ask_shell(ShellEvent::NewWindow(NewWindow {
+                fullscreen: false,
+                ssh: None,
+            })),
+            Action::CloseWindow => self.ask_shell(ShellEvent::CloseWindow),
         }
+    }
+
+    /// A window key is the shell's to act on; the surface only asks.
+    fn ask_shell(&self, event: ShellEvent) -> bool {
+        let Some(proxy) = self.shell_events.as_ref() else {
+            return false;
+        };
+        if proxy.send_event(event).is_err() {
+            log::debug!("the shell is gone; a window key has nowhere to go");
+        }
+        true
     }
 }
 
@@ -290,10 +310,6 @@ pub(super) fn key_text(event: &winit::event::KeyEvent) -> Option<&str> {
     event.text_with_all_modifiers()
 }
 
-/// A single ASCII digit, which is what the chord's ten shortcuts each carry.
-fn is_digit(c: &str) -> bool {
-    c.len() == 1 && c.as_bytes()[0].is_ascii_digit()
-}
 
 /// winit's modifier state as the routing tables and the mouse encoder read
 /// it.

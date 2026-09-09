@@ -60,6 +60,7 @@
 //!   point as a refusal, so no caller writes a `cfg`.
 
 pub mod bank;
+pub mod bindings;
 pub mod channels;
 pub mod chord;
 pub mod chrome;

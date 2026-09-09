@@ -12,6 +12,7 @@ mod find_keys;
 mod frame_stats;
 mod fullscreen_pointer;
 mod ime;
+mod key_bindings;
 mod keyboard_scroll;
 mod meta_keys;
 mod one_instance;

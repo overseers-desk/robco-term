@@ -25,6 +25,7 @@ so the same bindings are typed there by pressing `Esc` and then the key.
 | `Ctrl`+`PageUp` / `PageDown` | Previous / next channel |
 | `Ctrl`+`Shift`+`Left` / `Right` | Move the channel on screen one slot |
 | `Alt`+`PageUp` / `PageDown` | Page the bank |
+| `Ctrl`+`Shift`+`B` | Fold the bank away, or bring it back |
 
 The digit `0` on its own means channel 10. Digits are typed one at a time,
 and the chord fires the moment no longer slot number could still match what
@@ -195,8 +196,24 @@ one the terminal started for a session it found closes. Typing `tmux -CC` at
 a session that already has a bank opens a second one; tmux allows a second
 client and the terminal does not refuse it.
 
+`Ctrl`+`Shift`+`B` folds the bank away and the well takes the whole
+window, the cabinet standing around it; the same chord brings the bank back
+at its configured width. It is this window's state and not a setting: a
+reload leaves a folded bank folded, and a new window opens with its bank.
+The digit chords keep naming channels while the bank is folded, as they do
+with no chassis drawn.
+
 ## Not bound
 
 Font size is a config key rather than a keystroke; see
 [config.md](config.md). Nothing here binds `Ctrl`+letter, so `Ctrl`+`C`,
 `Ctrl`+`D` and the readline chords reach the program untouched.
+
+## Moving a chord
+
+Every chord in this document is a shipped default, and the `[bindings]`
+table of the config file lays its own rows over them: a row on the same key
+and modifiers replaces a chord, a row on new ones adds one, and a chord a
+program wants back is bound to `pass`. `F11` is the one key the table does
+not reach. The table, the key names and the action names are in
+[config.md](config.md).

@@ -521,6 +521,10 @@ pub struct TerminalSurface {
     /// minimum-width hint and the shell owns every window, so a seam drag has
     /// to cross back ([`ShellEvent::SetBankWidth`]).
     shell_events: Option<EventLoopProxy<ShellEvent>>,
+    /// The chords in force, and the `[bindings]` rows they were built from,
+    /// so a reload that moved no row rebuilds nothing.
+    bindings: crate::bindings::Bindings,
+    binding_rows: Vec<config::KeyBinding>,
     /// What the input method is composing but has not committed, and whether
     /// composition is open at all.
     ///
@@ -975,6 +979,8 @@ impl TerminalSurface {
             seam_cursor: false,
             pointer_shape: CursorIcon::Default,
             shell_events: None,
+            bindings: crate::bindings::Bindings::shipped(),
+            binding_rows: Vec::new(),
             ime: ImeState::default(),
             last_find: String::new(),
             eof: false,
@@ -1346,6 +1352,17 @@ impl TerminalSurface {
     /// set it either way without having to know which it built.
     pub fn set_config(&mut self, config: Config) {
         self.base = config;
+        let cfg = self.live_config();
+        self.refresh_bindings(&cfg);
+    }
+
+    /// Rebuild the chords when the `[bindings]` rows moved, and only then:
+    /// the lookup runs on every keystroke and the build on a change.
+    fn refresh_bindings(&mut self, cfg: &Config) {
+        if cfg.bindings.keys != self.binding_rows {
+            self.bindings = crate::bindings::Bindings::build(&cfg.bindings.keys);
+            self.binding_rows = cfg.bindings.keys.clone();
+        }
     }
 
     /// Whether a channel opened now measures text by grapheme cluster
@@ -1414,6 +1431,7 @@ impl TerminalSurface {
         // handle did not exist yet. Take the real profile now rather than on
         // the first redraw, so the first frame is already the right shape.
         self.apply_cabinet_settings(&cfg);
+        self.refresh_bindings(&cfg);
     }
 
     /// The programmatic accessor: the live-preview throughput
@@ -1572,6 +1590,7 @@ impl TerminalSurface {
     /// would, on the thread that is allowed to act on it.
     fn apply_live_settings(&mut self) {
         let cfg = self.live_config();
+        self.refresh_bindings(&cfg);
         self.critters.configure(
             cfg.critters.enabled,
             critter_interval(cfg.critters.minutes),

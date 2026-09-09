@@ -234,6 +234,10 @@ pub enum ShellEvent {
     /// means is the shell's answer, the shell being the only thing that
     /// knows which one has focus.
     OpenSettings,
+    /// A surface's `close_window` chord. The window is the shell's to
+    /// remove, and which window is the shell's answer, as for
+    /// [`ShellEvent::OpenSettings`].
+    CloseWindow,
     /// The application menu's Quit item was chosen ([`crate::menu`]).
     ///
     /// Deliberately not AppKit's `terminate:`, which ends the process with
@@ -651,6 +655,15 @@ impl ApplicationHandler<ShellEvent> for Shell {
                     }
                 }
             }
+            ShellEvent::CloseWindow => {
+                let open: Vec<WindowId> = self.windows.keys().copied().collect();
+                if let Some(id) = menu_target(self.focused, &open) {
+                    self.windows.remove(&id);
+                    if self.windows.is_empty() {
+                        event_loop.exit();
+                    }
+                }
+            }
             ShellEvent::Quit => event_loop.exit(),
         }
     }
@@ -718,7 +731,6 @@ impl ApplicationHandler<ShellEvent> for Shell {
                 if event.state != ElementState::Pressed {
                     return;
                 }
-                let ctrl_shift = self.modifiers.control_key() && self.modifiers.shift_key();
                 match event.physical_key {
                     // Explicit F11: the GNOME platform theme maps the
                     // platform's standard full-screen shortcut to Ctrl+F11,
@@ -749,16 +761,6 @@ impl ApplicationHandler<ShellEvent> for Shell {
                                 inner.width,
                                 inner.height
                             );
-                        }
-                    }
-                    PhysicalKey::Code(KeyCode::KeyN) if ctrl_shift => {
-                        let ssh = self.config.ssh.clone();
-                        self.open_window(event_loop, false, ssh.as_ref());
-                    }
-                    PhysicalKey::Code(KeyCode::KeyQ) if ctrl_shift => {
-                        self.windows.remove(&window_id);
-                        if self.windows.is_empty() {
-                            event_loop.exit();
                         }
                     }
                     // Not one of the shell's own; the surface decides
