@@ -9,7 +9,8 @@
 //! 3. [`term::pointer`] says what the event means, because that depends on
 //!    terminal state rather than on the window;
 //! 4. only then does anything happen -- a selection, a [`crate::mouse`]
-//!    report down the wire, or a [`crate::clipboard`] paste.
+//!    report down the wire, a [`crate::clipboard`] paste, or, for the wheel
+//!    on the alternate screen, the arrow keys [`crate::input`] encodes.
 //!
 //! The seam gets first refusal on every press, drag and hover before any of
 //! it ([`super::seam`]).
@@ -484,9 +485,7 @@ impl TerminalSurface {
         let cell_height = f64::from(self.viewport.term_size().cell_height).max(1.0);
 
         // Shift is the user's override: it scrolls the view even while a
-        // program is tracking the mouse. A program hears whole notches, so
-        // a trackpad's pixels are banked until they add up to a line; the
-        // view itself takes them as they come.
+        // program is tracking the mouse.
         if self.terminal_uses_mouse() && !mods.shift {
             let notches = self.wheel_notches(delta, cell_height);
             if notches == 0 {

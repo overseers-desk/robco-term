@@ -239,9 +239,8 @@ mod tests {
         assert_eq!(bracket_paste("", true), b"\x1b[200~\x1b[201~".to_vec());
     }
 
-    /// Clipboard text carrying the end marker must not be able to write it:
-    /// a shell that saw it would take the rest of the run as typing and the
-    /// newline behind it as Enter, so a copied web page could run a command.
+    /// A pasted end marker must not be able to close the bracket: a copied
+    /// web page could otherwise run a command.
     #[test]
     fn a_pasted_end_marker_cannot_close_the_bracket() {
         let out = bracket_paste("ls\x1b[201~\nrm -rf /\n", true);
@@ -252,8 +251,6 @@ mod tests {
         );
     }
 
-    /// Unbracketed, the program cannot tell a paste from typing, so the line
-    /// endings are the ones the Enter key sends.
     #[test]
     fn unbracketed_line_endings_are_what_enter_sends() {
         assert_eq!(bracket_paste("one\ntwo\r\n", false), b"one\rtwo\r".to_vec());
