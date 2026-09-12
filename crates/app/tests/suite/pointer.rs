@@ -218,6 +218,23 @@ fn a_wheel_notch_scrolls_the_view_three_lines_back() {
     assert_ne!(after[0], before[0], "and something older is above it");
 }
 
+/// A program on the alternate screen has no history behind it, so the
+/// wheel is the arrow keys there, which is how `man` and `less` move under
+/// the same gesture that moves the view on the primary screen. The keytab
+/// answers what an arrow is, so a program that asked for application cursor
+/// keys gets those and one that did not gets the plain form.
+#[test]
+fn the_wheel_is_the_arrow_keys_on_the_alternate_screen() {
+    let mut surface = surface("stty raw -echo; printf '\\033[?1049hREADY'; cat -v", 10);
+    wait_for_screen(&mut surface, "READY");
+
+    surface.mouse_wheel(MouseScrollDelta::LineDelta(0.0, 1.0), none());
+    wait_for_screen(&mut surface, "^[[A^[[A^[[A");
+
+    surface.mouse_wheel(MouseScrollDelta::LineDelta(0.0, -1.0), none());
+    wait_for_screen(&mut surface, "^[[B^[[B^[[B");
+}
+
 /// Scrolling back down again returns to following the live output.
 #[test]
 fn scrolling_back_down_re_follows_the_output() {

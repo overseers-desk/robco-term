@@ -108,7 +108,7 @@ impl TerminalSurface {
     /// that kept a copy would answer for the channel that set it long after
     /// another one came to the glass. `ansi` is true because rio-vt has no
     /// VT52 mode to leave.
-    fn keyboard_modes(&self) -> KeyboardModes {
+    pub(super) fn keyboard_modes(&self) -> KeyboardModes {
         use term::rio_vt::crosswords::Mode;
         KeyboardModes {
             ansi: true,

@@ -29,10 +29,10 @@ use term::rio_vt::crosswords::Mode;
 use term::selection;
 use winit::dpi::PhysicalPosition;
 use winit::event::{MouseButton, MouseScrollDelta};
-use winit::keyboard::ModifiersState;
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::CursorIcon;
 
-use crate::input::Modifiers;
+use crate::input::{encode_winit_key, KeyAction, Modifiers};
 use crate::settings;
 use crate::{clipboard, mouse};
 
@@ -459,6 +459,22 @@ impl TerminalSurface {
         }
     }
 
+    /// Whole notches from a wheel event: a trackpad's pixels are banked
+    /// here until they add up to a line, because a program hears notches
+    /// while the view itself takes pixels as they come.
+    fn wheel_notches(&mut self, delta: MouseScrollDelta, cell_height: f64) -> i32 {
+        match delta {
+            MouseScrollDelta::LineDelta(_, lines) => f64::from(lines),
+            MouseScrollDelta::PixelDelta(pixels) => {
+                self.wheel_pixels += pixels.y;
+                let lines = (self.wheel_pixels / cell_height).trunc();
+                self.wheel_pixels -= lines * cell_height;
+                lines
+            }
+        }
+        .trunc() as i32
+    }
+
     pub(super) fn on_mouse_wheel(&mut self, delta: MouseScrollDelta, modifiers: ModifiersState) {
         self.attended();
         // The view is about to move under the pointer, so the link it was
@@ -472,16 +488,7 @@ impl TerminalSurface {
         // a trackpad's pixels are banked until they add up to a line; the
         // view itself takes them as they come.
         if self.terminal_uses_mouse() && !mods.shift {
-            let notches = match delta {
-                MouseScrollDelta::LineDelta(_, lines) => f64::from(lines),
-                MouseScrollDelta::PixelDelta(pixels) => {
-                    self.wheel_pixels += pixels.y;
-                    let lines = (self.wheel_pixels / cell_height).trunc();
-                    self.wheel_pixels -= lines * cell_height;
-                    lines
-                }
-            };
-            let notches = notches.trunc() as i32;
+            let notches = self.wheel_notches(delta, cell_height);
             if notches == 0 {
                 return;
             }
@@ -494,6 +501,37 @@ impl TerminalSurface {
             for _ in 0..notches.abs() {
                 self.report_mouse(button, cell, mods, true);
             }
+            return;
+        }
+
+        // The alternate screen has no history behind it, so there the wheel
+        // is the arrow keys, and a pager moves under the same gesture that
+        // moves the view on the primary screen. The keytab answers what an
+        // arrow is, so a program that asked for application cursor keys gets
+        // those; `WHEEL_LINES` is the distance the view itself would travel,
+        // so one notch covers the same ground on either screen.
+        if !mods.shift && self.mode_contains(Mode::ALT_SCREEN | Mode::ALTERNATE_SCROLL) {
+            let notches = self.wheel_notches(delta, cell_height);
+            if notches == 0 {
+                return;
+            }
+            let arrow = if notches > 0 {
+                NamedKey::ArrowUp
+            } else {
+                NamedKey::ArrowDown
+            };
+            let modes = self.keyboard_modes();
+            let Some(KeyAction::Bytes(arrow)) =
+                encode_winit_key(&Key::Named(arrow), Modifiers::NONE, modes)
+            else {
+                return;
+            };
+            let lines = notches.abs() * term::viewport::WHEEL_LINES;
+            let mut out = Vec::with_capacity(arrow.len() * lines as usize);
+            for _ in 0..lines {
+                out.extend_from_slice(&arrow);
+            }
+            self.write(&out);
             return;
         }
 
