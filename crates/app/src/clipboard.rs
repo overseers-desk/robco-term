@@ -195,18 +195,27 @@ fn get_primary(_handle: &mut Clipboard) -> Option<Result<String, arboard::Error>
     None
 }
 
-/// Wrap `text` in DEC bracketed-paste markers (`\x1b[200~` ... `\x1b[201~`)
-/// when the terminal has bracketed paste enabled, so the shell/program on
-/// the other end can tell pasted text from typed text. Pure and unit
-/// tested; a paste is expected to route its result through this before
-/// writing to the pty.
+/// The bytes a paste puts on the wire: what the clipboard held, shaped so
+/// that the program on the other end reads it as one paste and cannot be
+/// made to read part of it as a command.
+///
+/// Bracketed, the run is wrapped in DEC's markers (`\x1b[200~` ...
+/// `\x1b[201~`) and `\x1b` and `\x03` come out of the middle first. Without
+/// that, clipboard text carrying `\x1b[201~` closes the bracket early and
+/// what follows arrives as typing; a shell then runs the rest of the line
+/// on the newline after it. Unbracketed, a program cannot tell a paste from
+/// typing at all, so the line endings become the `\r` the Enter key sends.
+///
+/// Pure and unit tested; a paste is expected to route its result through
+/// this before writing to the pty.
 pub fn bracket_paste(text: &str, bracketed_paste_enabled: bool) -> Vec<u8> {
     if !bracketed_paste_enabled {
-        return text.as_bytes().to_vec();
+        return text.replace("\r\n", "\r").replace('\n', "\r").into_bytes();
     }
-    let mut out = Vec::with_capacity(text.len() + 12);
+    let filtered = text.replace(['\x1b', '\x03'], "");
+    let mut out = Vec::with_capacity(filtered.len() + 12);
     out.extend_from_slice(b"\x1b[200~");
-    out.extend_from_slice(text.as_bytes());
+    out.extend_from_slice(filtered.as_bytes());
     out.extend_from_slice(b"\x1b[201~");
     out
 }
@@ -228,6 +237,26 @@ mod tests {
     #[test]
     fn bracket_paste_empty_string() {
         assert_eq!(bracket_paste("", true), b"\x1b[200~\x1b[201~".to_vec());
+    }
+
+    /// Clipboard text carrying the end marker must not be able to write it:
+    /// a shell that saw it would take the rest of the run as typing and the
+    /// newline behind it as Enter, so a copied web page could run a command.
+    #[test]
+    fn a_pasted_end_marker_cannot_close_the_bracket() {
+        let out = bracket_paste("ls\x1b[201~\nrm -rf /\n", true);
+        assert_eq!(
+            out,
+            b"\x1b[200~ls[201~\nrm -rf /\n\x1b[201~".to_vec(),
+            "the pasted escape reached the program"
+        );
+    }
+
+    /// Unbracketed, the program cannot tell a paste from typing, so the line
+    /// endings are the ones the Enter key sends.
+    #[test]
+    fn unbracketed_line_endings_are_what_enter_sends() {
+        assert_eq!(bracket_paste("one\ntwo\r\n", false), b"one\rtwo\r".to_vec());
     }
 
     /// The two targets are two slots, and writing one leaves the other
