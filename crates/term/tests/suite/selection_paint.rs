@@ -507,7 +507,10 @@ fn a_cursor_inside_a_selection_is_drawn_as_its_inverse() {
     let image = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
 
     let (lit, _) = lit_and_dark(&image, cell_rect(&renderer, 3, 1));
-    assert!(lit > 0, "test setup: the marked blank beside the cursor is not lit");
+    assert!(
+        lit > 0,
+        "test setup: the marked blank beside the cursor is not lit"
+    );
     assert_eq!(
         lit_and_dark(&image, cell_rect(&renderer, 2, 1)).0,
         0,
@@ -515,20 +518,21 @@ fn a_cursor_inside_a_selection_is_drawn_as_its_inverse() {
     );
 }
 
-/// Reverse video gives a cell a plate in the cursor's colour as well, and a
-/// cell can turn to it under a cursor that never moves: the cursor is drawn
-/// from the rebuilt cell and swaps the same way.
+/// Reverse video gives a cell a plate in or near the cursor's colour, here
+/// palette 7's light grey, and a cell can turn to it under a cursor that
+/// never moves: the cursor takes whichever of its two colours stands farther
+/// from the rebuilt cell's plate.
 #[test]
 fn a_cursor_on_a_reverse_video_cell_is_drawn_as_its_inverse() {
     let Some((gpu, _lock)) = gpu() else { return };
-    let scheme = Scheme::monochrome(PHOSPHOR, BEHIND);
+    let scheme = Scheme::full_color(PHOSPHOR, BEHIND);
     let (mut renderer, mut font) = renderer(&gpu, &scheme);
     let mut viewport = ScrollPosition::default();
     let (mut term, mut processor) = terminal();
 
     // A reverse-video blank written at column 2 and stepped back onto, so
     // the cursor is where it was for both frames.
-    for bytes in [&b"$ "[..], b"\x1b[7m \x1b[D"] {
+    for bytes in [&b"$ "[..], b"\x1b[7;37m \x1b[D"] {
         processor.advance(&mut term, bytes);
         renderer.sync(
             &gpu.device,
@@ -545,6 +549,39 @@ fn a_cursor_on_a_reverse_video_cell_is_drawn_as_its_inverse() {
     assert_eq!(
         lit_and_dark(&image, cell_rect(&renderer, 2, 0)).0,
         0,
-        "the cursor on a reverse-video blank is lit like the blank's own plate"
+        "the cursor on a light grey reverse-video blank is drawn light"
     );
+}
+
+/// A composition is drawn as a run of block cursor, so over a selection it
+/// was the selection's own picture: each of its cells takes the cursor's rule.
+#[test]
+fn a_composition_over_a_selection_is_drawn_as_its_inverse() {
+    let Some((gpu, _lock)) = gpu() else { return };
+    let scheme = Scheme::monochrome(PHOSPHOR, BEHIND);
+    let (mut renderer, mut font) = renderer(&gpu, &scheme);
+    let mut viewport = ScrollPosition::default();
+    let (mut term, mut processor) = terminal();
+
+    processor.advance(&mut term, b"$ ");
+    let run = marked(0, 6, 0);
+    renderer.sync(
+        &gpu.device,
+        &gpu.queue,
+        &mut font,
+        &mut term,
+        &mut viewport,
+        Some(&run),
+        None,
+    );
+    renderer.set_preedit(&gpu.queue, "xy");
+    let image = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
+
+    for col in [2, 3] {
+        let (lit, dark) = lit_and_dark(&image, cell_rect(&renderer, col, 0));
+        assert!(
+            lit < dark,
+            "composition cell {col} is a lit plate, like the selection under it"
+        );
+    }
 }
