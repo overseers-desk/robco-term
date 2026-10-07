@@ -1041,6 +1041,13 @@ impl GridRenderer {
         let cell_w = self.pitch(role, self.grid.cells[cursor.row * self.cols + cursor.col].c);
         let y = cursor.row as i32 * cell_h;
 
+        // A marked cell is already drawn in the cursor's colours, phosphor
+        // plate and dark glyph, so a cursor on one swaps them to be seen.
+        let (color, text_color) = if marked_at(self.marked.as_ref(), cursor.row, cursor.col) {
+            (cursor.text_color, cursor.color)
+        } else {
+            (cursor.color, cursor.text_color)
+        };
         let (dst, size) = match cursor.shape {
             CursorShape::Block => ([x, y], [cell_w, cell_h]),
             // Two unscaled pixels, so the bar is still visible at 1x and grows
@@ -1053,14 +1060,14 @@ impl GridRenderer {
             dst,
             size,
             src: SOLID,
-            color: cursor.color,
+            color,
         };
         // Only a block cursor covers the character; the other shapes leave it
         // legible and need no redraw.
         if cursor.shape == CursorShape::Block {
             let cell = self.grid.cells[cursor.row * self.cols + cursor.col];
             self.instances[base + 1] =
-                glyph_instance(&self.atlas, role, cell.c, x, y + baseline, cursor.text_color);
+                glyph_instance(&self.atlas, role, cell.c, x, y + baseline, text_color);
         }
     }
 
@@ -1318,6 +1325,10 @@ pub mod vt {
                     .filter(|&row| marking_differs(self.marked.as_ref(), marked, row, self.cols))
                     .collect()
             };
+            // The cursor's colours depend on whether its cell is marked.
+            let cursor_remarked = cursor.is_some_and(|c| {
+                marked_at(self.marked.as_ref(), c.row, c.col) != marked_at(marked, c.row, c.col)
+            });
             self.marked = marked.cloned();
 
             // The link under the pointer moves the same way, and a row it
@@ -1400,7 +1411,7 @@ pub mod vt {
                 self.upload_row(queue, self.rows);
             }
 
-            if cursor != previous {
+            if cursor != previous || cursor_remarked {
                 self.cursor = cursor;
                 self.build_cursor();
                 self.upload_cursor(queue);
