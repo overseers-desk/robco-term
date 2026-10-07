@@ -514,3 +514,37 @@ fn a_cursor_inside_a_selection_is_drawn_as_its_inverse() {
         "the cursor on a marked blank is lit like the marked blank beside it"
     );
 }
+
+/// Reverse video gives a cell a plate in the cursor's colour as well, and a
+/// cell can turn to it under a cursor that never moves: the cursor is drawn
+/// from the rebuilt cell and swaps the same way.
+#[test]
+fn a_cursor_on_a_reverse_video_cell_is_drawn_as_its_inverse() {
+    let Some((gpu, _lock)) = gpu() else { return };
+    let scheme = Scheme::monochrome(PHOSPHOR, BEHIND);
+    let (mut renderer, mut font) = renderer(&gpu, &scheme);
+    let mut viewport = ScrollPosition::default();
+    let (mut term, mut processor) = terminal();
+
+    // A reverse-video blank written at column 2 and stepped back onto, so
+    // the cursor is where it was for both frames.
+    for bytes in [&b"$ "[..], b"\x1b[7m \x1b[D"] {
+        processor.advance(&mut term, bytes);
+        renderer.sync(
+            &gpu.device,
+            &gpu.queue,
+            &mut font,
+            &mut term,
+            &mut viewport,
+            None,
+            None,
+        );
+    }
+    let image = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
+
+    assert_eq!(
+        lit_and_dark(&image, cell_rect(&renderer, 2, 0)).0,
+        0,
+        "the cursor on a reverse-video blank is lit like the blank's own plate"
+    );
+}
