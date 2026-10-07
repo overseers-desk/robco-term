@@ -478,3 +478,39 @@ fn a_linked_run_is_underlined_and_nothing_else_moves() {
         "the underline left something behind after the pointer moved off"
     );
 }
+
+/// A block cursor is a phosphor plate with a dark glyph, which is what a
+/// marked cell is too, so inside a selection it would vanish. There it is
+/// drawn the other way round, and a mark arriving under a cursor that has
+/// not moved redraws it.
+#[test]
+fn a_cursor_inside_a_selection_is_drawn_as_its_inverse() {
+    let Some((gpu, _lock)) = gpu() else { return };
+    let scheme = Scheme::monochrome(PHOSPHOR, BEHIND);
+    let (mut renderer, mut font) = renderer(&gpu, &scheme);
+    let mut viewport = ScrollPosition::default();
+    let (mut term, mut processor) = terminal();
+
+    // The prompt leaves the cursor on the blank at column 2 of row 1.
+    processor.advance(&mut term, b"HELLO WORLD\r\n$ ");
+    for run in [None, Some(marked(0, 6, 1))] {
+        renderer.sync(
+            &gpu.device,
+            &gpu.queue,
+            &mut font,
+            &mut term,
+            &mut viewport,
+            run.as_ref(),
+            None,
+        );
+    }
+    let image = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
+
+    let (lit, _) = lit_and_dark(&image, cell_rect(&renderer, 3, 1));
+    assert!(lit > 0, "test setup: the marked blank beside the cursor is not lit");
+    assert_eq!(
+        lit_and_dark(&image, cell_rect(&renderer, 2, 1)).0,
+        0,
+        "the cursor on a marked blank is lit like the marked blank beside it"
+    );
+}
