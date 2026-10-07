@@ -877,9 +877,13 @@ impl GridRenderer {
         let x = cursor.col as i32 * cell_w;
         let y = cursor.row as i32 * cell_h;
 
-        // A marked cell is already drawn in the cursor's colours, phosphor
-        // plate and dark glyph, so a cursor on one swaps them to be seen.
-        let (color, text_color) = if marked_at(self.marked.as_ref(), cursor.row, cursor.col) {
+        // A marked cell and a reverse-video one can have a plate in the
+        // cursor's own colour, so a cursor on one swaps its colours to be seen.
+        let mut under = self.grid.cells[cursor.row * self.cols + cursor.col];
+        if marked_at(self.marked.as_ref(), cursor.row, cursor.col) {
+            under = inverted(under, &self.scheme);
+        }
+        let (color, text_color) = if under.bg[3] > 0.0 && under.bg[..3] == cursor.color[..3] {
             (cursor.text_color, cursor.color)
         } else {
             (cursor.color, cursor.text_color)
@@ -1146,10 +1150,6 @@ pub mod vt {
                     .filter(|&row| marking_differs(self.marked.as_ref(), marked, row, self.cols))
                     .collect()
             };
-            // The cursor's colours depend on whether its cell is marked.
-            let cursor_remarked = cursor.is_some_and(|c| {
-                marked_at(self.marked.as_ref(), c.row, c.col) != marked_at(marked, c.row, c.col)
-            });
             self.marked = marked.cloned();
 
             // The link under the pointer moves the same way, and a row it
@@ -1232,7 +1232,10 @@ pub mod vt {
                 self.upload_row(queue, self.rows);
             }
 
-            if cursor != previous || cursor_remarked {
+            // The cursor is drawn from the cell under it, so a rebuilt row
+            // rebuilds a cursor standing on it as surely as a move does.
+            let cursor_row = cursor.is_some_and(|c| rows_to_update.contains(&c.row));
+            if cursor != previous || cursor_row {
                 self.cursor = cursor;
                 self.build_cursor();
                 self.upload_cursor(queue);
