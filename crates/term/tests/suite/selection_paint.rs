@@ -520,8 +520,7 @@ fn a_cursor_inside_a_selection_is_drawn_as_its_inverse() {
 
 /// Reverse video gives a cell a plate in or near the cursor's colour, here
 /// palette 7's light grey, and a cell can turn to it under a cursor that
-/// never moves: the cursor takes whichever of its two colours stands farther
-/// from the rebuilt cell's plate.
+/// never moves.
 #[test]
 fn a_cursor_on_a_reverse_video_cell_is_drawn_as_its_inverse() {
     let Some((gpu, _lock)) = gpu() else { return };
@@ -553,8 +552,8 @@ fn a_cursor_on_a_reverse_video_cell_is_drawn_as_its_inverse() {
     );
 }
 
-/// A composition is drawn as a run of block cursor, so over a selection it
-/// was the selection's own picture: each of its cells takes the cursor's rule.
+/// A composition is drawn as a run of block cursor, so over a selection each
+/// of its cells picks its colours as the cursor does.
 #[test]
 fn a_composition_over_a_selection_is_drawn_as_its_inverse() {
     let Some((gpu, _lock)) = gpu() else { return };
