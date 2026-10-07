@@ -137,9 +137,8 @@ pub fn lift(c: Rgba, toward: Rgba, amount: f32) -> Rgba {
     ]
 }
 
-/// How bright a colour reaches the glass: the chain's last pass weighs each
-/// colour into one grey by these weights (`rgb2grey` in
-/// `terminal_dynamic.slang`) before tinting it with the profile's colours.
+/// How bright a colour reaches the glass, as the chain's last pass weighs it
+/// (`rgb2grey` in `terminal_dynamic.slang`).
 pub fn grey(c: Rgba) -> f32 {
     0.21 * c[0] + 0.72 * c[1] + 0.04 * c[2]
 }

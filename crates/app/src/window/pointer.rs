@@ -284,8 +284,8 @@ impl TerminalSurface {
     }
 
     /// What a gesture marked, at debug level: the range, how many characters
-    /// it copied (never which), and the three column counts the range is
-    /// reckoned in, which ought to be one number.
+    /// it copied (never which), and the column counts the range is reckoned
+    /// in, which ought to be one number.
     fn log_marked(&self, gesture: &str, cell: (usize, usize), text: &Option<String>) {
         if !log::log_enabled!(log::Level::Debug) {
             return;
