@@ -801,7 +801,11 @@ impl GridRenderer {
             // The link under the pointer is underlined the same way, and
             // after the marking, so a selected link keeps its swapped
             // colours: the line is drawn in whatever the glyph is drawn in.
+            // On a cell the program underlined already, the link's line goes
+            // in under the program's own, so the hover still shows.
+            let mut line_h = 1;
             if marked_at(self.link.as_ref(), row, col) {
+                line_h += i32::from(cell.underline);
                 cell.underline = true;
                 cell.line_color = cell.fg;
             }
@@ -838,9 +842,10 @@ impl GridRenderer {
             // a third of the ascent above it: unscaled raster pixels, so both
             // magnify with everything else instead of thinning out.
             self.instances[under_base + col] = if cell.underline {
+                let top = (baseline + 1).min(cell_h - 1);
                 Instance {
-                    dst: [x, y + (baseline + 1).min(cell_h - 1)],
-                    size: [cell_w, 1],
+                    dst: [x, y + top],
+                    size: [cell_w, line_h.min(cell_h - top)],
                     src: SOLID,
                     color: cell.line_color,
                 }
