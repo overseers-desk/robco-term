@@ -585,3 +585,42 @@ fn a_composition_over_a_selection_is_drawn_as_its_inverse() {
         );
     }
 }
+
+/// Text the program underlined already looks no different with a one-pixel
+/// line added in the same place, so there the link's line goes in under it.
+#[test]
+fn a_hovered_link_on_underlined_text_still_shows() {
+    let Some((gpu, _lock)) = gpu() else { return };
+    let scheme = Scheme::monochrome(PHOSPHOR, BEHIND);
+    let (mut renderer, mut font) = renderer(&gpu, &scheme);
+    let mut viewport = ScrollPosition::default();
+    let (mut term, mut processor) = terminal();
+
+    processor.advance(&mut term, b"\x1b[4mhttp://x\x1b[0m\r\n");
+    renderer.sync(
+        &gpu.device,
+        &gpu.queue,
+        &mut font,
+        &mut term,
+        &mut viewport,
+        None,
+        None,
+    );
+    let plain = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
+    let link = marked(0, 7, 0);
+    renderer.sync(
+        &gpu.device,
+        &gpu.queue,
+        &mut font,
+        &mut term,
+        &mut viewport,
+        None,
+        Some(&link),
+    );
+    let hovered = renderer.render_to_image(&gpu, wgpu::Color::BLACK);
+
+    assert_ne!(
+        plain.pixels, hovered.pixels,
+        "hovering the underlined link changed nothing"
+    );
+}
