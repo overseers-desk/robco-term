@@ -137,6 +137,13 @@ pub fn lift(c: Rgba, toward: Rgba, amount: f32) -> Rgba {
     ]
 }
 
+/// How bright a colour reaches the glass: the chain's last pass weighs each
+/// colour into one grey by these weights (`rgb2grey` in
+/// `terminal_dynamic.slang`) before tinting it with the profile's colours.
+pub fn grey(c: Rgba) -> f32 {
+    0.21 * c[0] + 0.72 * c[1] + 0.04 * c[2]
+}
+
 /// SGR 1's second job. Bold picks a heavier face, and it also moves a base
 /// ANSI colour to its bright twin, which is what the second eight were cut
 /// for. The twins sit at 8..16 of the same table, so the move is an index

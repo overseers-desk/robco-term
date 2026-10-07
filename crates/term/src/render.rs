@@ -24,7 +24,7 @@ use wgpu::util::DeviceExt as _;
 
 use crate::atlas::{FontContext, GlyphAtlas};
 use crate::cells::{Cell, CellGrid, CursorShape, CursorState};
-use crate::color::{Rgba, Scheme};
+use crate::color::{grey, Rgba, Scheme};
 use gpu::{Gpu, Image, Target, TARGET_FORMAT};
 use crate::selection::MarkedRange;
 
@@ -877,17 +877,7 @@ impl GridRenderer {
         let x = cursor.col as i32 * cell_w;
         let y = cursor.row as i32 * cell_h;
 
-        // A marked cell and a reverse-video one can have a plate in the
-        // cursor's own colour, so a cursor on one swaps its colours to be seen.
-        let mut under = self.grid.cells[cursor.row * self.cols + cursor.col];
-        if marked_at(self.marked.as_ref(), cursor.row, cursor.col) {
-            under = inverted(under, &self.scheme);
-        }
-        let (color, text_color) = if under.bg[3] > 0.0 && under.bg[..3] == cursor.color[..3] {
-            (cursor.text_color, cursor.color)
-        } else {
-            (cursor.color, cursor.text_color)
-        };
+        let (color, text_color) = self.standing_out(cursor.row, cursor.col, &cursor);
         let (dst, size) = match cursor.shape {
             CursorShape::Block => ([x, y], [cell_w, cell_h]),
             // Two unscaled pixels, so the bar is still visible at 1x and grows
@@ -908,6 +898,27 @@ impl GridRenderer {
             let cell = self.grid.cells[cursor.row * self.cols + cursor.col];
             self.instances[base + 1] =
                 glyph_instance(&self.atlas, cell.c, x, y + baseline, text_color);
+        }
+    }
+
+    /// The cursor's two colours, plate first, for a cursor drawn over the
+    /// cell at `row`, `col`: the plate is whichever stands farther from the
+    /// plate already drawn there, which a mark or reverse video can make the
+    /// cursor's own colour or one close to it.
+    fn standing_out(&self, row: usize, col: usize, cursor: &CursorState) -> (Rgba, Rgba) {
+        let mut under = self.grid.cells[row * self.cols + col];
+        if marked_at(self.marked.as_ref(), row, col) {
+            under = inverted(under, &self.scheme);
+        }
+        let plate = grey(if under.bg[3] > 0.0 {
+            under.bg
+        } else {
+            self.scheme.background
+        });
+        if (grey(cursor.color) - plate).abs() < (grey(cursor.text_color) - plate).abs() {
+            (cursor.text_color, cursor.color)
+        } else {
+            (cursor.color, cursor.text_color)
         }
     }
 
@@ -943,14 +954,15 @@ impl GridRenderer {
                 break;
             }
             let x = col as i32 * cell_w;
+            let (color, text_color) = self.standing_out(cursor.row, col, &cursor);
             self.instances[base + i * PREEDIT_BLOCKS] = Instance {
                 dst: [x, y],
                 size: [cell_w, cell_h],
                 src: SOLID,
-                color: cursor.color,
+                color,
             };
             self.instances[base + i * PREEDIT_BLOCKS + 1] =
-                glyph_instance(&self.atlas, c, x, y + baseline, cursor.text_color);
+                glyph_instance(&self.atlas, c, x, y + baseline, text_color);
         }
     }
 
