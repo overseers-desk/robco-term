@@ -2029,6 +2029,10 @@ impl TerminalSurface {
         // it means something else at a new one. Konsole cleared it on
         // resize for exactly that reason, and `set_columns` does.
         if self.selection.columns() != size.cols() {
+            if self.dragging {
+                let cols = size.cols();
+                log::debug!("{cols} columns mid-drag: the drag marks nothing more");
+            }
             self.selection.set_columns(size.cols());
         }
         // Every channel, not only the one on the air. There is one rectangle

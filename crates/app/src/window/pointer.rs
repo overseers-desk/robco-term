@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use term::distortion::{self, correct_distortion, DistortionParams};
 use term::pointer::{self, on_press, opens_link, PointerAction, PointerContext};
+use term::rio_vt::crosswords::grid::Dimensions;
 use term::rio_vt::crosswords::pos::Side;
 use term::rio_vt::crosswords::Mode;
 use term::selection;
@@ -282,6 +283,26 @@ impl TerminalSurface {
         self.write(&bytes);
     }
 
+    /// What a gesture marked, at debug level: the range, how many characters
+    /// it copied (never which), and the three column counts the range is
+    /// reckoned in, which ought to be one number.
+    fn log_marked(&self, gesture: &str, cell: (usize, usize), text: &Option<String>) {
+        if !log::log_enabled!(log::Level::Debug) {
+            return;
+        }
+        let Some(session) = self.channels.session() else {
+            return;
+        };
+        log::debug!(
+            "{gesture} at {cell:?}: {:?}, {} characters; columns: window {}, grid {}, selection {}",
+            self.selection.range(session.term()),
+            text.as_ref().map_or(0, |t| t.chars().count()),
+            self.selection_window().columns,
+            session.term().grid.columns(),
+            self.selection.columns(),
+        );
+    }
+
     pub(super) fn on_mouse_pressed(
         &mut self,
         button: MouseButton,
@@ -314,6 +335,7 @@ impl TerminalSurface {
             || self.strip_pressed(button, position)
             || self.pager_pressed(button, position)
         {
+            log::debug!("{button:?} press at {position:?} taken by the cabinet");
             return;
         }
         let Some(button) = pointer_button(button) else {
@@ -330,7 +352,9 @@ impl TerminalSurface {
         } else {
             None
         };
-        match on_press(self.pointer_context(), button, mods, link.is_some()) {
+        let action = on_press(self.pointer_context(), button, mods, link.is_some());
+        log::debug!("{button:?} press at {position:?}, cell {cell:?} {side:?}: {action:?}");
+        match action {
             PointerAction::Mark | PointerAction::MarkAndActivateHotSpot => {
                 self.retarget_selection(self.selection_kind());
                 let now = Instant::now();
@@ -349,11 +373,13 @@ impl TerminalSurface {
                     // so a drag afterwards extends by whole words.
                     2 => {
                         let text = self.select_word_at(cell, side);
+                        self.log_marked("double click", cell, &text);
                         self.copy_on_select(text);
                     }
                     // The whole logical line, wrapping and all.
                     3 => {
                         let text = self.select_line_at(cell, side);
+                        self.log_marked("triple click", cell, &text);
                         self.copy_on_select(text);
                     }
                     _ => self.begin_selection(cell, side, mods),
@@ -421,6 +447,7 @@ impl TerminalSurface {
             // keystroke: it is what a middle click pastes the moment the
             // button comes up.
             let text = self.end_selection(side);
+            self.log_marked("release", cell, &text);
             self.copy_on_select(text);
             return;
         }
@@ -452,6 +479,7 @@ impl TerminalSurface {
         self.refresh_hover(mods);
 
         if self.dragging {
+            log::trace!("drag to {cell:?} {side:?}");
             self.drag_selection_to(cell, side);
             return;
         }
@@ -568,6 +596,9 @@ impl TerminalSurface {
             // so a drag left running would resume on the next move. The seam's
             // release also writes what its drag landed, which is why it is the
             // same call the button makes and not a flag cleared here.
+            if self.dragging {
+                log::debug!("focus lost with the button down; the drag ends unreleased");
+            }
             self.dragging = false;
             self.seam_released();
             // And the press that was a secondary click is over with it: a
