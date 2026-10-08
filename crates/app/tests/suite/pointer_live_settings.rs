@@ -38,12 +38,18 @@ const COLS: u32 = 40;
 /// which column the click landed on without needing to count characters.
 const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+/// The screen row a probe presses on. The alphabet fills the top four rows,
+/// so this pixel row holds text at the small margin, where it is the fourth
+/// row, and at the large one, where the grid has moved down two rows under
+/// it. A press above the grid is the window's handle and marks nothing.
+const ROW: u32 = 3;
+
 fn scripted() -> SessionConfig {
     SessionConfig {
         program: Some("/bin/sh".to_string()),
         args: vec![
             "-c".to_string(),
-            format!("printf '{ALPHABET}\\n'; sleep 10"),
+            format!("for _ in 1 2 3 4; do printf '{ALPHABET}\\n'; done; sleep 10"),
         ],
         working_directory: None,
         env: vec![
@@ -103,9 +109,9 @@ fn wait_until(mut predicate: impl FnMut() -> bool, timeout: Duration) -> bool {
 /// One drag-select at a fixed pixel span, reporting the selected text
 /// (the letters under the drag).
 fn select_at_fixed_pixels(surface: &mut TerminalSurface, from_col: u32, to_col: u32) -> String {
-    surface.mouse_pressed(MouseButton::Left, at(from_col, 0), none());
-    surface.cursor_moved(at(to_col, 0), none());
-    surface.mouse_released(MouseButton::Left, at(to_col, 0), none());
+    surface.mouse_pressed(MouseButton::Left, at(from_col, ROW), none());
+    surface.cursor_moved(at(to_col, ROW), none());
+    surface.mouse_released(MouseButton::Left, at(to_col, ROW), none());
     surface
         .last_selection()
         .expect("a press-drag-release should select something")
@@ -231,7 +237,7 @@ fn a_click_lands_on_the_same_cell_at_dpr_1_and_dpr_2() {
         // A logical point becomes a physical one by the ratio, which is what
         // the platform hands `cursor_moved` on a HiDPI screen.
         let click = |column: u32| {
-            let p = at(column, 0);
+            let p = at(column, ROW);
             PhysicalPosition::new(p.x * scale, p.y * scale)
         };
         surface.mouse_pressed(MouseButton::Left, click(10), none());

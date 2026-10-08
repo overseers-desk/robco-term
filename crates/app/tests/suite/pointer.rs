@@ -177,6 +177,22 @@ fn a_short_drag_selects_only_what_it_crossed() {
     assert_eq!(surface.last_selection(), Some("hello"));
 }
 
+/// A press off the grid is the window's handle, not a mark: the drag that
+/// follows moves the window and crosses no text. Headless there is no window
+/// to move, so what is measured is the half that is the pointer path's own,
+/// that nothing was selected.
+#[test]
+fn a_drag_begun_off_the_grid_marks_nothing() {
+    let mut surface = surface("printf 'hello world\\n'", 24);
+    wait_for_screen(&mut surface, "hello world");
+
+    surface.mouse_pressed(MouseButton::Left, at(COLS + 1, 0), none());
+    surface.cursor_moved(at(5, 0), none());
+    surface.mouse_released(MouseButton::Left, at(5, 0), none());
+
+    assert_eq!(surface.last_selection(), None);
+}
+
 /// Two presses on the same cell inside the double-click window take the
 /// whole word, without a drag.
 #[test]

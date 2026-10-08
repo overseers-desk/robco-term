@@ -60,6 +60,10 @@ walls: a step past either leaves the bank as it stands.
 `F11` ignores its modifiers, so the same key works for a hand used to
 Konsole's `Ctrl`+`Shift`+`F11` and one used to a bare `F11`.
 
+The cabinet is the window's handle: drag the bezel, the margin around the
+text, or the bank's casting, and the window moves. Where the text is, a drag
+selects.
+
 ## Copying and pasting
 
 | Key | What it does |
