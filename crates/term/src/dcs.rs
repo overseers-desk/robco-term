@@ -60,6 +60,11 @@ pub trait DcsTap {
     fn in_control_mode(&self) -> bool {
         false
     }
+
+    /// Whether an `ESC \` arriving now ends the control-mode envelope.
+    fn may_close(&self) -> bool {
+        true
+    }
 }
 
 /// The no-op tap: sees everything, remembers nothing.
@@ -125,7 +130,8 @@ impl<T: DcsTap> Perform for DcsOnly<'_, T> {
 /// it unhooks the block.
 ///
 /// So a block the tap answers [`DcsTap::in_control_mode`] for bypasses the
-/// VT parser and reaches the tap verbatim, terminated only by `ESC \`.
+/// VT parser and reaches the tap verbatim, terminated by an `ESC \` only
+/// where the tap answers [`DcsTap::may_close`]: tmux closes after `%exit`.
 /// Every other DCS keeps rio-vt's standard handling: a tap that wants none
 /// of the body discards it anyway, and a sixel that ends on an 8-bit `ST`
 /// must still be able to end.
@@ -226,10 +232,10 @@ impl<T: DcsTap> DcsParser<T> {
         1
     }
 
-    /// One byte of a control-mode body, terminated only by `ESC \`.
+    /// One byte of a control-mode body; `ESC \` ends it where [`DcsTap::may_close`] holds.
     fn envelope(&mut self, byte: u8, esc: bool) -> usize {
         if esc {
-            if byte == b'\\' {
+            if byte == b'\\' && self.tap.may_close() {
                 // Let the VT parser close the block it opened, so it
                 // returns to ground and the tap hears its `unhook`
                 // through the same path every other DCS uses.
@@ -238,7 +244,7 @@ impl<T: DcsTap> DcsParser<T> {
                 return 1;
             }
             // Not the terminator, so the `ESC` was payload: a colour
-            // sequence in a `capture-pane -e` reply, most often.
+            // sequence or hyperlink in a `capture-pane -e` reply.
             self.tap.put(0x1B);
         }
         if byte == 0x1B {

@@ -243,8 +243,9 @@ impl TerminalSurface {
         };
 
         let mut events = gateway.advance(&bytes);
-        // `ST` without a preceding `%exit`: the gateway program died
-        // mid-protocol.
+        // `ST` closes the envelope only after an `%exit` line, which the
+        // codec has already turned into a detach; an `ST` that finds the
+        // gateway still attached ends the attachment here.
         if ended && gateway.attached() {
             events.extend(gateway.control_mode_ended());
         }

@@ -16,15 +16,17 @@
 //! the whole `0x80..=0xFF` run and a raw `0x9C` among them ride the
 //! envelope as payload; a `capture-pane -e` reply carries raw `ESC [ ... m`
 //! by design. Under ECMA-48's string state those would be dropped, dropped,
-//! and read as the terminator. Only `ESC \` ends the envelope, which is the
-//! rule tmux emits under and the rule the transcript fixtures are peeled by
-//! (`tmux-cc/tests/support`'s `control_stream`).
+//! and read as the terminator. tmux closes the envelope only after an `%exit`
+//! line, so an `ESC \` before one is payload, the hyperlink terminator inside
+//! a `capture-pane -e` reply among it. A pane that itself shows a line
+//! beginning `%exit` followed by a hyperlink terminator still closes it early.
 
 use crate::dcs::DcsTap;
 
 /// tmux control mode's DCS params and action: `ESC P 1000 p`.
 const TMUX_PARAMS: &[u16] = &[1000];
 const TMUX_ACTION: char = 'p';
+const EXIT: &[u8] = b"%exit";
 
 /// The shipped tap: recognises `DCS 1000 p`, tmux's control-mode
 /// envelope, and peels its body for the gateway.
@@ -40,10 +42,10 @@ const TMUX_ACTION: char = 'p';
 ///   Buffered here rather than handed to a callback so the tap stays
 ///   free of any `tmux-cc` type: `term` knows there is an envelope, not
 ///   what is in it.
-/// * **The close** ([`ControlModeTap::take_ended`]): `ST` arrived. With
-///   a preceding `%exit` this is the ordinary end of a detach; without
-///   one it marks that the gateway program died mid-protocol and the
-///   host must collapse the page.
+/// * **The close** ([`ControlModeTap::take_ended`]): `ST` arrived, after
+///   the `%exit` line tmux ends every attachment with, so the codec has
+///   already seen the detach; the host collapses the page on this edge
+///   only if that line never reached it.
 ///
 /// Any DCS that is not `1000p` is ignored whole: its body neither
 /// buffers nor flips the flags, so a sixel or a `DECRQSS` reply cannot
@@ -55,6 +57,10 @@ pub struct ControlModeTap {
     detected: bool,
     ended: bool,
     body: Vec<u8>,
+    /// How much of `EXIT` the current body line has matched; `None` once not.
+    line: Option<usize>,
+    /// The last complete body line began with `EXIT`.
+    exited: bool,
 }
 
 impl ControlModeTap {
@@ -84,12 +90,23 @@ impl DcsTap for ControlModeTap {
             // close edge) must not reach the next gateway as its own.
             self.body.clear();
             self.ended = false;
+            self.line = Some(0);
+            self.exited = false;
         }
     }
 
     fn put(&mut self, byte: u8) {
-        if self.active {
-            self.body.push(byte);
+        if !self.active {
+            return;
+        }
+        self.body.push(byte);
+        match (byte, self.line) {
+            (b'\n', line) => {
+                self.exited = line == Some(EXIT.len());
+                self.line = Some(0);
+            }
+            (_, Some(n)) if n < EXIT.len() => self.line = (EXIT[n] == byte).then_some(n + 1),
+            _ => {}
         }
     }
 
@@ -103,6 +120,10 @@ impl DcsTap for ControlModeTap {
     fn in_control_mode(&self) -> bool {
         self.active
     }
+
+    fn may_close(&self) -> bool {
+        self.exited
+    }
 }
 
 #[cfg(test)]
@@ -110,7 +131,8 @@ mod tests {
     use super::*;
     use crate::dcs::DcsParser;
 
-    const TMUX_DCS: &[u8] = b"\x1bP1000p%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1\x1b\\AFTER-DCS";
+    const TMUX_DCS: &[u8] =
+        b"\x1bP1000p%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1\r\n%exit\r\n\x1b\\AFTER-DCS";
 
     #[test]
     fn the_control_tap_detects_peels_and_reports_the_close() {
@@ -121,7 +143,7 @@ mod tests {
         assert!(!tap.take_detected(), "one edge per envelope");
         assert_eq!(
             String::from_utf8_lossy(&tap.take_body()),
-            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1"
+            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1\r\n%exit\r\n"
         );
         assert!(tap.take_body().is_empty(), "a drain drains");
         assert!(tap.take_ended());
@@ -213,10 +235,10 @@ mod tests {
     #[test]
     fn a_capture_reply_keeps_the_escape_sequences_it_is_made_of() {
         // `capture-pane -e` answers with the page's own escape sequences,
-        // so the first `ESC [ 31 m` is payload. Only `ESC \` ends the
-        // envelope, and a coloured prompt is full of the other kind.
+        // so the first `ESC [ 31 m` is payload. `ESC \` ends the
+        // envelope only after `%exit`, and a coloured prompt is full of the other kind.
         let body: &[u8] =
-            b"%begin 1 1 1\r\n\x1b[31mred\x1b[0m $ \x1b[1;32mprompt\x1b[m\r\n%end 1 1 1";
+            b"%begin 1 1 1\r\n\x1b[31mred\x1b[0m $ \x1b[1;32mprompt\x1b[m\r\n%end 1 1 1\r\n%exit\r\n";
         let mut wire = Vec::from(&b"\x1bP1000p"[..]);
         wire.extend_from_slice(body);
         wire.extend_from_slice(b"\x1b\\");
@@ -251,7 +273,7 @@ mod tests {
         assert!(tap.take_detected(), "the sixel ate the attachment");
         assert_eq!(
             String::from_utf8_lossy(&tap.take_body()),
-            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1"
+            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1\r\n%exit\r\n"
         );
     }
 
@@ -267,8 +289,41 @@ mod tests {
         let whole = [first, second].concat();
         assert_eq!(
             String::from_utf8_lossy(&whole),
-            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1"
+            "%begin 1 1 1\r\n%output %1 hi\r\n%end 1 1 1\r\n%exit\r\n"
         );
         assert!(p.tap_mut().take_ended());
+    }
+
+    #[test]
+    fn a_hyperlink_terminator_before_exit_is_payload() {
+        let reply: &[u8] =
+            b"%begin 1 2 1\r\n\x1b]8;;http://x.y\x1b\\link\x1b]8;;\x1b\\\r\n%end 1 2 1\r\n";
+        let mut wire = Vec::from(&b"\x1bP1000p"[..]);
+        wire.extend_from_slice(reply);
+        for chunk in [1usize, 3, 7, 64, wire.len()] {
+            let mut p = DcsParser::new(ControlModeTap::default());
+            let mut body = Vec::new();
+            for part in wire.chunks(chunk) {
+                p.feed(part);
+                body.extend(p.tap_mut().take_body());
+                assert!(
+                    !p.tap_mut().take_ended(),
+                    "chunked by {chunk}: closed early"
+                );
+            }
+            assert!(
+                p.tap().in_control_mode(),
+                "chunked by {chunk}: not still open"
+            );
+            assert_eq!(body, reply, "chunked by {chunk}: the reply was cut");
+        }
+    }
+
+    #[test]
+    fn exit_with_a_reason_closes_the_envelope() {
+        let mut p = DcsParser::new(ControlModeTap::default());
+        p.feed(b"\x1bP1000p%exit server exited unexpectedly\r\n\x1b\\");
+        assert!(p.tap_mut().take_ended());
+        assert!(!p.tap().in_control_mode());
     }
 }
