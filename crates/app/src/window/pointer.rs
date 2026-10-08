@@ -459,6 +459,12 @@ impl TerminalSurface {
             self.seam_released();
             return;
         }
+        // A release on the cabinet is the cabinet's, as the press was: it
+        // ends no mark and reaches no program. A drag that began on the
+        // glass is the exception, and ends at the edge it ran off.
+        if button == MouseButton::Left && !self.dragging && self.off_grid(position) {
+            return;
+        }
         let Some(button) = pointer_button(button) else {
             return;
         };
@@ -499,6 +505,14 @@ impl TerminalSurface {
         // Every motion goes to the seam, drag or no drag: it tracks the pointer
         // for the cursor's shape and moves nothing until it is held.
         if self.seam_moved(position) {
+            return;
+        }
+        // Over the cabinet nothing is under the pointer: no link to
+        // underline, no cell to report. A drag begun on the glass still
+        // follows the pointer out, to the edge.
+        if !self.dragging && self.off_grid(position) {
+            self.pointer_present = false;
+            self.set_hover(None);
             return;
         }
         let (cell, side) = self.cell_side_at(position);
