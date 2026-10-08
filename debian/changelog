@@ -8,10 +8,6 @@ robco-term (0.3.1) unstable; urgency=medium
   * A layout change for a window that is not current, which tmux sends
     with an empty flags field, parses instead of logging a malformed
     notification per window on every attach.
-  * The prose face is no longer part of this package: --prose-font,
-    screen.prose_scaling and screen.monospace_trigger are gone from the
-    terminal, and a config file still carrying the two keys is read with
-    them ignored. The face continues on the proportional branch.
 
  -- Weiwu Zhang <a@colourful.land>  Thu, 08 Oct 2026 22:35:41 +1000
 
