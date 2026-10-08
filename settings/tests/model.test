@@ -53,7 +53,7 @@ test schema-1.1 {defaults are raw TOML, presets in declaration order} -constrain
 
 test schema-1.2 {fonts are catalogue key and display name} -constraints realBinary -body {
     lindex [::rcsettings::model::fonts] 6
-} -result {COZETTE_SCALED Cozette}
+} -result {COZETTE_SCALED Cozette 13 true}
 
 test schema-1.3 {the value lists} -constraints realBinary -body {
     list [::rcsettings::model::enum shell] \
@@ -136,13 +136,15 @@ test set-3.5 {a value is formatted after the type of its default} -constraints r
     ::rcsettings::model::set_value screen font_name IOSEVKA
     ::rcsettings::model::set_value general led_characters 20
     ::rcsettings::model::set_value screen blinking_cursor 1
-    ::rcsettings::model::set_value general font_scaling 2
+    ::rcsettings::model::set_value general font_size 28
+    ::rcsettings::model::set_value general window_scaling 2
     set text [on_disk]
     lmap {table key} {screen font_name general led_characters
-                      screen blinking_cursor general font_scaling} {
+                      screen blinking_cursor general font_size
+                      general window_scaling} {
         ::tomledit::get $text $table.$key
     }
-} -result {{"IOSEVKA"} 20 true 2.0}
+} -result {{"IOSEVKA"} 20 true 28 2.0}
 
 test set-3.6 {an absent file is an empty document to edit} -constraints realBinary -setup {
     without_config
@@ -178,7 +180,7 @@ test switch-5.1 {switching presets drops this table's overrides only} -constrain
 # Do not let the bloom get away from you again.
 
 \[general\]
-font_scaling   =   1.2\t# bigger type, fewer rows
+font_size   =   30\t# bigger type, fewer rows
 effects_frame_skip = 2
 
 
@@ -403,10 +405,10 @@ test guard-15.1 {an edit is refused whole on a file outside the subset} -constra
 } -result {1 1 1}
 
 test guard-15.2 {reading an unsafe file still works} -constraints realBinary -setup {
-    with_config "\[general\]\nfont_scaling = 1.5\npoint = { x = 1 }\n"
+    with_config "\[general\]\nfont_size = 36\npoint = { x = 1 }\n"
 } -body {
-    ::rcsettings::model::effective general font_scaling
-} -result 1.5
+    ::rcsettings::model::effective general font_size
+} -result 36
 
 # The bindings table is written in Rio's syntax, a multi-line array of
 # inline tables, the one shape of that kind the editor admits. A file
@@ -414,16 +416,16 @@ test guard-15.2 {reading an unsafe file still works} -constraints realBinary -se
 set ::bindings_block "\[bindings\]\nkeys = \[\n  { key = \"b\", with = \"ctrl | shift\", action = \"fold_bank\" },\n  { key = \"c\", with = \"ctrl | shift\", action = \"pass\" },\n\]\n"
 
 test guard-15.3 {a file carrying a bindings block is edited beside it} -constraints realBinary -setup {
-    set before [with_config "\[general\]\nfont_scaling = 1.5\n\n$::bindings_block"]
+    set before [with_config "\[general\]\nfont_size = 36\n\n$::bindings_block"]
 } -body {
-    ::rcsettings::model::set_value general font_scaling 1.2
+    ::rcsettings::model::set_value general font_size 30
     list [surgery $before [on_disk]] \
         [string equal [string range [on_disk] end-[expr {[string length $::bindings_block] - 1}] end] \
             $::bindings_block]
-} -result {{{{font_scaling = 1.5}} {{font_scaling = 1.2}}} 1}
+} -result {{{{font_size = 36}} {{font_size = 30}}} 1}
 
 test guard-15.4 {a binding row is addressable through the editor the window uses} -constraints realBinary -setup {
-    set before [with_config "\[general\]\nfont_scaling = 1.5\n\n$::bindings_block"]
+    set before [with_config "\[general\]\nfont_size = 36\n\n$::bindings_block"]
 } -body {
     list [::tomledit::count [on_disk] bindings.keys] \
         [::tomledit::plain [::tomledit::get [on_disk] {bindings.keys[1].action}]] \

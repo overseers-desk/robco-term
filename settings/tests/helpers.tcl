@@ -58,7 +58,7 @@ set ::fixture {# The workshop terminal.
 # Do not let the bloom get away from you again.
 
 [general]
-font_scaling   =   1.2	# bigger type, fewer rows
+font_size   =   30	# bigger type, fewer rows
 effects_frame_skip = 2
 
 

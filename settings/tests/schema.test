@@ -25,8 +25,8 @@ test schema-1.1 {the terminal's own dump is what the model reads} -constraints r
 
 test fonts-2.1 {a fonts document parses to name and label pairs} -body {
     ::rcsettings::model::system_fonts_text \
-        "\[\[fonts\]\]\nname = \"Hack\"\ntext = \"Hack\"\n\n\[\[fonts\]\]\nname = 'DejaVu \"Sans\" Mono'\ntext = \"DejaVu Sans Mono\"\n"
-} -result {{Hack Hack} {{DejaVu "Sans" Mono} {DejaVu Sans Mono}}}
+        "\[\[fonts\]\]\nname = \"Hack\"\ntext = \"Hack\"\npixel_size = 32\nlow_resolution = false\n\n\[\[fonts\]\]\nname = 'DejaVu \"Sans\" Mono'\ntext = \"DejaVu Sans Mono\"\npixel_size = 32\nlow_resolution = false\n"
+} -result {{Hack Hack 32 false} {{DejaVu "Sans" Mono} {DejaVu Sans Mono} 32 false}}
 
 test fonts-2.2 {a machine with nothing installed is an empty list, not an error} -body {
     ::rcsettings::model::system_fonts_text ""
