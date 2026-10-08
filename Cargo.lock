@@ -3626,7 +3626,7 @@ dependencies = [
 
 [[package]]
 name = "robco-app"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "bytemuck",

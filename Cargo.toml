@@ -25,7 +25,7 @@ members = [
 # `stage-deb` package whatever number is in the tree and never write to
 # this file.
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 
 # The emulation gaps esctest measures (DECSLRM/DECLRMM left-right margins,
 # origin mode, reverse wrap, cursor-stops-at-margin) are core grid semantics,
