@@ -313,11 +313,14 @@ fn phase_1_a_fresh_attach_populates_a_channel_for_every_window_and_the_first_gre
     // mode DCS envelope, where a VT parser reads the first `ESC` as the end
     // of the string. Under that reading the attachment dies here, before a
     // single channel stands, which is why this sits in phase 1 rather than
-    // in a phase of its own.
+    // in a phase of its own. An OSC 8 hyperlink's `ESC \` terminator, also
+    // in such a capture, is what a VT parser reads as the envelope's close.
     let windows = server.windows();
     server.send_raw(&windows[0], b"\x1b[31mRED-PROMPT\x1b[0m $ \r\n");
+    let link: &[u8] = b"\x1b]8;;http://x.y\x1b\\LINK\x1b]8;;\x1b\\\r\n";
+    server.send_raw(&windows[0], link);
     let deadline = Instant::now() + Duration::from_secs(10);
-    while !server.captured(&windows[0]).contains("RED-PROMPT") {
+    while !server.captured(&windows[0]).contains("LINK") {
         assert!(
             Instant::now() < deadline,
             "the pane never took the coloured text"
@@ -327,6 +330,10 @@ fn phase_1_a_fresh_attach_populates_a_channel_for_every_window_and_the_first_gre
     assert!(
         server.captured(&windows[0]).contains('\x1b'),
         "capture-pane -e reported no escape sequences; the scenario is vacuous"
+    );
+    assert!(
+        server.captured(&windows[0]).contains("\x1b\\"),
+        "the capture holds no hyperlink terminator; the scenario is vacuous"
     );
 
     let mut surface = surface();
