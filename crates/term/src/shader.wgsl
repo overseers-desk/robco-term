@@ -16,14 +16,14 @@
 // integer origin, divides by the integer scale, and reads that texel with
 // `textureLoad`. No filtering can occur because no filter is ever consulted.
 // This is not the binary path's private arrangement: a scalable face resolves
-// to `integer_scale` 1 (`fonts::sizing::resolve` leaves `screen_scaling` at 1.0
-// and `dpr_scale` at 1 for it), so its coverage is read one texel to one pixel
-// and there is nothing for a filter to do either.
+// to `integer_scale` 1 (`fonts::sizing::resolve` rasterises it at the device
+// pixel size it draws at), so its coverage is read one texel to one pixel and
+// there is nothing for a filter to do either.
 //
 // The other half of the design: instances are written in *unscaled* raster
 // pixels and the scale lives in a uniform. Layout therefore happens once, and
-// a DPR change is a uniform write rather than a rebuild of anything. That is
-// what makes the atlas survive a monitor change intact.
+// a DPR change under a pixel face is a uniform write rather than a rebuild of
+// anything. That is what makes its atlas survive a monitor change intact.
 
 struct Uniforms {
     viewport: vec2<f32>,

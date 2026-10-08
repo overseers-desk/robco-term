@@ -33,7 +33,7 @@ use gpu::harness::GpuLock;
 use term::atlas::Rasterization;
 use term::cells::CellGrid;
 use term::color::Scheme;
-use term::fonts::sizing::{self, ResolvedFont, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, ResolvedFont, SizingRequest};
 use term::fonts::{self, font_by_name, FontEntry, FontSource};
 use gpu::{Gpu, Image};
 use term::render::GridRenderer;
@@ -103,7 +103,7 @@ fn scheme() -> Scheme {
 
 fn fixture(spec: &FontEntry, gpu: &Gpu, request: SizingRequest) -> (ResolvedFont, GridRenderer) {
     let scheme = scheme();
-    let resolved = sizing::resolve(spec, &request, ScalePolicy::Floor);
+    let resolved = sizing::resolve(spec, &request);
     let mut font = FontContext::new(spec);
     assert_eq!(
         font.family, spec.family,
@@ -184,7 +184,7 @@ fn property_1_antialiasing_is_off() {
 fn property_1_control_the_measurement_can_see_antialiasing() {
     let Some((gpu, _lock)) = gpu() else { return };
     for spec in [terminess(), commodore_pet()] {
-        let resolved = sizing::resolve(spec, &SizingRequest::default(), ScalePolicy::Floor);
+        let resolved = sizing::resolve(spec, &SizingRequest::default());
         // A size the face was never drawn for. Every face antialiases here, so
         // this control holds whatever a face does at its native size.
         //
@@ -273,7 +273,7 @@ fn property_1_premise_a_low_resolution_face_needs_no_threshold() {
         .iter()
         .filter(|f| f.low_resolution && !f.text.is_empty())
     {
-        let resolved = sizing::resolve(spec, &SizingRequest::default(), ScalePolicy::Floor);
+        let resolved = sizing::resolve(spec, &SizingRequest::default());
         assert_eq!(
             resolved.raster_pixel_size, spec.pixel_size,
             "{}: a low-resolution face is rasterised at its design size and \
@@ -313,7 +313,7 @@ fn property_1_premise_a_low_resolution_face_needs_no_threshold() {
         );
     }
     let terminess = font_by_name("TERMINESS_SCALED", FontSource::Bundled).expect("catalogue");
-    let resolved = sizing::resolve(terminess, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(terminess, &SizingRequest::default());
     let mut font = FontContext::new(terminess);
     let coverage = font.build_atlas(
         &gpu.device,
@@ -381,11 +381,17 @@ fn property_3_dpr_changes_do_not_touch_the_atlas() {
                     device_pixel_ratio: dpr,
                     ..Default::default()
                 },
-                ScalePolicy::Floor,
             );
             assert_eq!(
                 resolved.raster_pixel_size, base.raster_pixel_size,
                 "{}: raster size moved at dpr {dpr}",
+                spec.name
+            );
+            let nearest = (24.0 * dpr / spec.pixel_size as f64).round() as u32;
+            assert_eq!(
+                resolved.integer_scale,
+                nearest.max(1),
+                "{}: dpr {dpr} is not one whole magnification of size and density",
                 spec.name
             );
 
@@ -416,12 +422,8 @@ fn property_3_dpr_changes_do_not_touch_the_atlas() {
                 diff.describe()
             );
             eprintln!(
-                "{}: dpr {dpr} -> integer_scale {} (screen_scaling {:.3}), {}x{}, exact",
-                spec.name,
-                resolved.integer_scale,
-                resolved.screen_scaling,
-                image.width,
-                image.height
+                "{}: dpr {dpr} -> integer_scale {}, {}x{}, exact",
+                spec.name, resolved.integer_scale, image.width, image.height
             );
         }
     }

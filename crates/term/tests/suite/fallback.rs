@@ -31,7 +31,7 @@
 
 use gpu::harness::GpuLock;
 use term::atlas::Rasterization;
-use term::fonts::sizing::{self, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, SizingRequest};
 use term::fonts::{font_by_name, FontEntry, FontSource};
 use gpu::Gpu;
 use term::{ascii_charset, FontContext};
@@ -45,7 +45,7 @@ fn terminess() -> &'static FontEntry {
 }
 
 fn pixel_size(entry: &FontEntry) -> f32 {
-    sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor).raster_pixel_size as f32
+    sizing::resolve(entry, &SizingRequest::default()).raster_pixel_size as f32
 }
 
 /// The seven, with the name each one goes by in a failure message.
@@ -112,11 +112,7 @@ fn an_ascii_session_never_loads_the_system_font_database() {
         let mut buf = [0u8; 4];
         font.covering_glyphs(c.encode_utf8(&mut buf), px);
     }
-    font.cell_metrics(&sizing::resolve(
-        entry,
-        &SizingRequest::default(),
-        ScalePolicy::Floor,
-    ));
+    font.cell_metrics(&sizing::resolve(entry, &SizingRequest::default()));
 
     assert!(
         !font.system_fonts_loaded(),
@@ -165,7 +161,7 @@ fn gpu() -> Option<(Gpu, GpuLock)> {
 fn a_withheld_glyph_appended_afterwards_is_the_glyph_the_build_would_have_packed() {
     let Some((gpu, _lock)) = gpu() else { return };
     let entry = terminess();
-    let resolved = sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(entry, &SizingRequest::default());
     let mode = Rasterization::for_face(&resolved);
 
     let mut font = FontContext::new(entry);
@@ -212,7 +208,7 @@ fn a_withheld_glyph_appended_afterwards_is_the_glyph_the_build_would_have_packed
 fn appending_past_the_allocated_height_grows_the_texture_and_says_so() {
     let Some((gpu, _lock)) = gpu() else { return };
     let entry = terminess();
-    let resolved = sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(entry, &SizingRequest::default());
     let mode = Rasterization::for_face(&resolved);
 
     let mut font = FontContext::new(entry);

@@ -23,7 +23,7 @@ use gpu::harness::GpuLock;
 use term::atlas::Rasterization;
 use term::cells::{CellGrid, CursorShape, CursorState};
 use term::color::Scheme;
-use term::fonts::sizing::{self, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, SizingRequest};
 use term::fonts::{font_by_name, FontEntry, FontSource};
 use gpu::{Gpu, Image};
 use term::render::GridRenderer;
@@ -78,7 +78,7 @@ fn cursor_at(col: usize, row: usize) -> CursorState {
 fn fixture(gpu: &Gpu) -> GridRenderer {
     let scheme = Scheme::monochrome(WHITE, TRANSPARENT);
     let spec = terminess();
-    let resolved = sizing::resolve(spec, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(spec, &SizingRequest::default());
     let mut font = FontContext::new(spec);
     let atlas = font.build_atlas(
         &gpu.device,

@@ -15,7 +15,7 @@
 //! `pixel_properties` uses for a missing GPU: a skipped test that announces the
 //! skip is evidence, a test that quietly finds nothing to assert is not.
 
-use term::fonts::sizing::{self, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, SizingRequest};
 use term::fonts::{
     filtered_fonts, font_by_name, system_fonts, FontSource, MODERN_RASTERIZATION,
     SYSTEM_FONT_PIXEL_SIZE,
@@ -128,7 +128,7 @@ fn a_selected_system_face_shapes_and_measures() {
         "the enumerated family name is not the family the face reports"
     );
 
-    let resolved = sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(entry, &SizingRequest::default());
     // A system face is not low-resolution, so it takes the scalable half's
     // sizing: the raster size moves with the requested height and the integer
     // scale stays at one.

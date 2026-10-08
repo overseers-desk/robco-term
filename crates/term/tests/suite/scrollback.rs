@@ -27,7 +27,7 @@ use std::time::Instant;
 use term::atlas::Rasterization;
 use term::color::Scheme;
 use term::fonts::{font_by_name, FontSource};
-use term::fonts::sizing::{self, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, SizingRequest};
 use gpu::Gpu;
 use term::render::GridRenderer;
 use term::viewport::{ScrollPosition, WHEEL_GLIDE};
@@ -83,7 +83,7 @@ fn gpu() -> Option<(Gpu, GpuLock)> {
 fn renderer(gpu: &Gpu, scheme: &Scheme) -> (GridRenderer, FontContext) {
     let terminess = font_by_name("TERMINESS_SCALED", FontSource::Bundled)
         .expect("TERMINESS_SCALED in the catalogue");
-    let resolved = sizing::resolve(terminess, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(terminess, &SizingRequest::default());
     let mut font = FontContext::new(terminess);
     let atlas = font.build_atlas(
         &gpu.device,

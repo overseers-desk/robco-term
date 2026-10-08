@@ -7,8 +7,8 @@
 //!     `fallback_name`) that decides how a face may be rasterised;
 //!   * [`metrics`], the scaled-metric arithmetic (see that module for the
 //!     rule and the evidence);
-//!   * [`sizing`], the sizing policy plus the integer-scale policy the
-//!     renderer needs on top of it;
+//!   * [`sizing`], the arithmetic from a requested type size to a raster
+//!     size and a whole-number magnification;
 //!   * [`raster`], the one rule for turning a face into pixels -- the
 //!     embedded bitmap strike first, the outline only as a fallback -- which
 //!     both rasterising callers in this crate share.
@@ -35,8 +35,6 @@ pub mod text;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-/// The base pixel height a font's other metrics are scaled from.
-pub const BASE_FONT_PIXEL_HEIGHT: f64 = 32.0;
 /// The rasterization value that means "modern": it selects the
 /// non-low-resolution half of the catalogue.
 pub const MODERN_RASTERIZATION: i32 = 4;

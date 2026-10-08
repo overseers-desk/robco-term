@@ -74,7 +74,7 @@ pub use cells::{Cell, CellGrid, CursorShape, CursorState};
 pub use color::{Rgba, Scheme};
 pub use dcs::{DcsParser, DcsTap, NoopTap};
 pub use distortion::{correct_distortion, DistortionParams};
-pub use fonts::sizing::{resolve, ResolvedFont, ScalePolicy, SizingRequest};
+pub use fonts::sizing::{resolve, ResolvedFont, SizingRequest};
 pub use fonts::{bundled_fonts, font_by_name, system_fonts, FontEntry, FontSource};
 // From `robco-gpu`, not from a module of this crate.
 pub use gpu::{Gpu, Image, Target};
@@ -126,9 +126,8 @@ pub fn build_font(
     queue: &wgpu::Queue,
     spec: &FontEntry,
     request: &SizingRequest,
-    policy: ScalePolicy,
 ) -> (ResolvedFont, FontContext, GlyphAtlas) {
-    let resolved = resolve(spec, request, policy);
+    let resolved = resolve(spec, request);
     let mut font = FontContext::new(spec);
     let atlas = font.build_atlas(
         device,

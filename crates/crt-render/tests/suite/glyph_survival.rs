@@ -37,7 +37,7 @@ use term::atlas::Rasterization;
 use term::cells::CellGrid;
 use term::color::Scheme;
 use term::fonts::{font_by_name, FontSource};
-use term::fonts::sizing::{self, ScalePolicy, SizingRequest};
+use term::fonts::sizing::{self, SizingRequest};
 use gpu::Image;
 use term::render::GridRenderer;
 use term::{ascii_charset, FontContext, DEFAULT_THRESHOLD};
@@ -125,7 +125,7 @@ fn measure(name: &str, (w, h): (u32, u32)) -> Survival {
         font_width: cfg.screen.font_width,
         ..SizingRequest::default()
     };
-    let resolved = sizing::resolve(entry, &request, ScalePolicy::Floor);
+    let resolved = sizing::resolve(entry, &request);
     let scheme = Scheme::monochrome([1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]);
     let mut font = FontContext::new(entry);
     let atlas = font.build_atlas(
@@ -204,7 +204,7 @@ fn measure(name: &str, (w, h): (u32, u32)) -> Survival {
     let time = pacing.tick_by(Duration::from_micros(16_667));
     // `app::window::chain_geometry` for this target: the output in logical
     // pixels (DPR 1 here, so the same number), and the virtual resolution as
-    // the raster count `floor(size / (screenScaling * fontWidth))`.
+    // the raster count `floor(size / (integer_scale * font_width))`.
     let scale = step as f32;
     let geom = crt::Geometry {
         output_width: w as f32,

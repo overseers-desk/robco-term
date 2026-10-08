@@ -47,7 +47,7 @@ use term::atlas::Rasterization;
 use term::cells::CellGrid;
 use term::color::Scheme;
 use term::fonts::{font_by_name, FontSource};
-use term::fonts::sizing::{ScalePolicy, SizingRequest};
+use term::fonts::sizing::SizingRequest;
 use gpu::{Gpu, Image};
 use term::render::GridRenderer;
 use term::FontEntry;
@@ -108,8 +108,7 @@ fn ink(gpu: &Gpu, entry: &FontEntry) -> Ink {
 
 fn ink_at(gpu: &Gpu, entry: &FontEntry, request: SizingRequest) -> Ink {
     let scheme = Scheme::monochrome(WHITE, TRANSPARENT);
-    let (resolved, _font, atlas) =
-        term::build_font(&gpu.device, &gpu.queue, entry, &request, ScalePolicy::Floor);
+    let (resolved, _font, atlas) = term::build_font(&gpu.device, &gpu.queue, entry, &request);
     let mode = atlas.rasterization;
     let (atlas_intermediate, atlas_total) =
         (atlas.intermediate_value_count(), atlas.total_value_count());
@@ -289,14 +288,13 @@ fn terminess_takes_its_strike_even_with_antialiasing_on() {
     );
     assert_eq!(on_strike.image_intermediate, 0);
 
-    // `base_font_scaling` moves the requested height off the strike grid:
-    // 32 * 0.78125 * 1.0 truncates to 25, and Terminess's strikes are at 12,
-    // 14, 16, 18, 20, 22, 24, 28 and 32.
+    // 25 is off the strike grid: Terminess's strikes are at 12, 14, 16, 18,
+    // 20, 22, 24, 28 and 32.
     let off_strike = ink_at(
         &gpu,
         entry,
         SizingRequest {
-            base_font_scaling: 25.0 / 32.0,
+            font_size: 25,
             ..SizingRequest::default()
         },
     );

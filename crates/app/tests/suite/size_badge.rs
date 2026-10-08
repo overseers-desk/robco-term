@@ -29,7 +29,7 @@
 use app::chrome::{Badges, Chrome, Entry};
 use app::overlay::{GridSize, SizeOverlay, FADE, HOLD};
 use gpu::harness::Locked;
-use term::{ScalePolicy, SizingRequest, Target};
+use term::{SizingRequest, Target};
 
 /// A window at the default size the app opens with, and the shipped
 /// profile's bank, so the well the badge is centred in is not the whole
@@ -64,13 +64,7 @@ fn fixture() -> Fixture {
         .expect("at least one bundled font")
         .clone();
     let request = SizingRequest::default();
-    let (resolved, _font, atlas) = term::build_font(
-        &gpu.device,
-        &gpu.queue,
-        &entry,
-        &request,
-        ScalePolicy::Floor,
-    );
+    let (resolved, _font, atlas) = term::build_font(&gpu.device, &gpu.queue, &entry, &request);
     let scale = resolved.integer_scale;
     Fixture { gpu, atlas, scale }
 }
