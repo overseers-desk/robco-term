@@ -160,7 +160,7 @@ pub enum Notification {
     /// `%unlinked-window-renamed window-id name`.
     UnlinkedWindowRenamed { window: WindowId, name: String },
 
-    /// `%layout-change window-id layout visible-layout flags`.
+    /// `%layout-change window-id layout visible-layout flags`; flags is empty for a window that is not current.
     LayoutChange {
         window: WindowId,
         layout: String,

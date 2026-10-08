@@ -333,7 +333,7 @@ fn parse_notification(line: &[u8]) -> Notification {
         },
 
         "%layout-change" => {
-            if args.len() < 4 {
+            if args.len() < 3 {
                 return malformed();
             }
             match window(0) {
@@ -341,7 +341,7 @@ fn parse_notification(line: &[u8]) -> Notification {
                     window,
                     layout: text(args[1]),
                     visible_layout: text(args[2]),
-                    flags: text(args[3]),
+                    flags: args.get(3).map_or_else(String::new, |f| text(f)),
                 },
                 None => malformed(),
             }
@@ -601,6 +601,15 @@ mod tests {
                 rest: b"@1 only-one".to_vec(),
             }
         );
+    }
+
+    #[test]
+    fn a_layout_change_for_a_window_not_current_has_empty_flags() {
+        let Notification::LayoutChange { window, flags, .. } = note(b"%layout-change @1 a b \r\n")
+        else {
+            panic!("not a layout change");
+        };
+        assert!(window.to_string() == "@1" && flags.is_empty());
     }
 
     #[test]
