@@ -56,7 +56,7 @@ change the shape of the pipeline rather than a number inside it: the rebuild
 is quick, but it clears whatever phosphor burn-in had accumulated, so the
 ghost of your last screenful starts over. Those keys are:
 
-`general.window_scaling`, `general.font_scaling`, `general.bloom_quality`,
+`general.window_scaling`, `general.font_size`, `general.bloom_quality`,
 `general.burn_in_quality`, `general.chassis_shown`,
 `general.led_characters`, `screen.font_name`, `screen.font_source`,
 `screen.font_width`, `screen.line_spacing`, `screen.margin`,
@@ -154,8 +154,8 @@ profile switch.
 | Key | Default | What it does |
 |---|---|---|
 | `effects_frame_skip` | `3` | How many frames the effects clock holds a value before jumping. The CRT animates at 60/skip Hz, so the shipped `3` is 20 Hz. Lower it for a faster-moving picture at more GPU cost. This is the cadence while somebody is at the glass; a window that has lost the keyboard, or has gone five minutes without a keystroke, click or scroll, holds its picture and animates at nothing at all until you come back. Output still arrives and still draws, and a critter waits for you rather than crossing an empty screen. |
-| `window_scaling` | `1.0` | Scales the whole appliance: glass, chassis and all. |
-| `font_scaling` | `1.0` | Scales the type, and so the number of rows and columns the window holds. |
+| `window_scaling` | `1.0` | Scales the cabinet and the picture's composition; the type is sized by `font_size` alone. |
+| `font_size` | `24` | Height of the type in pixels at the display's own scale, so 24 on a scale-2 panel is 48 device pixels. A pixel face draws the whole multiple of its native size nearest to it; a scalable face draws it exactly. Line spacing is a fraction of the glyph height the face draws. |
 | `show_terminal_size` | `true` | Whether the size badge appears in the well while you drag the window. |
 | `bloom_quality` | `0.5` | Sizes the bloom framebuffer and sets the blur radius. Costs GPU; buys a smoother glow. |
 | `burn_in_quality` | `0.5` | Sizes the burn-in accumulator. |
@@ -368,7 +368,7 @@ protocol rather than a picture of a shell.
 ```toml
 # A quieter amber, in the wooden cabinet.
 [general]
-font_scaling = 1.2
+font_size = 28
 effects_frame_skip = 2
 
 [screen]

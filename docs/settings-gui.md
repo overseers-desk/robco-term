@@ -40,6 +40,11 @@ gives the reason. The rate is a picker over an ordinary integer key, so a
 figure the list does not offer can still be written by hand and the window
 will show it.
 
+The **Font size** row sits on the Screen tab's Type group, directly under
+Font, as a number typed in pixels. It writes a `[general]` key, so the preset
+dialog leaves it alone. Its readout says what the chosen face draws, `24 px
+(12 × 2)` for Terminess, and a note under the group states the rule.
+
 ## How it behaves
 
 Every change is applied the moment it is made. There is no Apply button
@@ -83,7 +88,8 @@ same spawn (a sibling binary first, then `$PATH`); a second is declined
 while one runs.
 The app asks the terminal for the schema when it opens: `robco-term
 --dump-settings` prints the defaults, the presets with every field
-resolved, the enum value lists and the bundled font catalogue, and
+resolved, the enum value lists and the bundled font catalogue, with
+each face's native pixel size and class beside its name, and
 `settings/lib/model.tcl` reads them from that. The Rust source is
 therefore the only statement of those values, and the window cannot show
 a stale one. The price is that the window needs the terminal binary

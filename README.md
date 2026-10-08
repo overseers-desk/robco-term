@@ -204,7 +204,7 @@ It is a diff against the defaults, so a real one is short:
 
 ```toml
 [general]
-font_scaling = 1.2
+font_size = 28
 
 [screen]
 name = "Deep Blue"
