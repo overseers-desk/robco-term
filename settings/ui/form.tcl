@@ -16,9 +16,8 @@
 #
 # The numeric ranges below are affordances of this window and not schema. The
 # terminal clamps and interprets what it reads; a range here only says how far
-# a slider travels, which is why the two scaling keys stop at 3.0 rather than
-# at whatever the shader would tolerate. A value outside a range that arrives
-# by hand-editing the file is displayed, not corrected.
+# a slider travels. A value outside a range that arrives by hand-editing the
+# file is displayed, not corrected.
 
 package require Tcl 9
 package require Tk
@@ -28,7 +27,8 @@ namespace eval ::rcsettings::ui::form {
         maybe_fetch_system_fonts
 
     # table -> list of {group-title rows}, where rows is a flat list of
-    # {key kind label argument} quadruples. Keys the docs mark as read by
+    # {key kind label argument} quadruples. A key written table.key belongs to
+    # that table though this page lists it. Keys the docs mark as read by
     # nothing in this build are absent on purpose: general.show_menubar,
     # general.use_custom_command, general.custom_command and
     # screen.blinking_cursor would be three controls that move nothing and
@@ -40,7 +40,6 @@ namespace eval ::rcsettings::ui::form {
             {The knobs that are yours} {
                 effects_frame_skip int   "Effects frame skip"   {1 10}
                 window_scaling     scale "Window scaling"       {0.4 3.0}
-                font_scaling       scale "Font scaling"         {0.4 3.0}
                 show_terminal_size bool  "Show terminal size"   {}
                 bloom_quality      frac  "Bloom quality"        {}
                 burn_in_quality    frac  "Burn-in quality"      {}
@@ -76,11 +75,13 @@ namespace eval ::rcsettings::ui::form {
             }
             {Type} {
                 font_name    font  "Font"         {}
+                general.font_size int "Font size" {6 128}
                 font_source  bool  "Also offer installed system fonts"
                     {system_fonts bundled_fonts}
                 font_width   scale "Font width"   {0.3 2.0}
                 line_spacing frac  "Line spacing" {}
                 margin       frac  "Margin"       {}
+                _ note "A pixel face draws at a whole multiple of its own size; the readout shows what the chosen face draws." {}
             }
             {Moulding, shown when the chassis is not} {
                 frame_size      frac  "Frame size"   {}
@@ -252,7 +253,9 @@ proc ::rcsettings::ui::form::page {parent table} {
         grid columnconfigure $g 2 -weight 1
         set r 0
         foreach {key kind label arg} $rows {
-            build_row $g $r $table $key $kind $label $arg
+            set rowtable $table
+            regexp {^(\w+)\.(.+)$} $key - rowtable key
+            build_row $g $r $rowtable $key $kind $label $arg $table
             incr r
         }
     }
@@ -312,11 +315,17 @@ proc ::rcsettings::ui::form::wheel {canvas delta} {
 # One row: the pinned dot, the label, the control, a readout where the control
 # has no number of its own, and the reset arrow. Five columns for every row of
 # every group, so the controls line up down the page.
-proc ::rcsettings::ui::form::build_row {g r table key kind label arg} {
+proc ::rcsettings::ui::form::build_row {g r table key kind label arg page} {
     variable Rows
     variable Order
     variable Value
     set id $table.$key
+    if {$kind eq "note"} {
+        ttk::label $g.note_$r -text $label -justify left -wraplength \
+            [expr {30 * [font metrics TkDefaultFont -linespace]}]
+        grid $g.note_$r -row $r -column 0 -columnspan 5 -sticky w -pady {4 0}
+        return
+    }
 
     set pin $g.pin_$key
     ttk::label $pin -text "•" -width 2 -style Unpinned.TLabel
@@ -421,7 +430,7 @@ proc ::rcsettings::ui::form::build_row {g r table key kind label arg} {
     grid $reset        -row $r -column 4 -sticky e
 
     dict set Rows $id $row
-    dict lappend Order $table $id
+    dict lappend Order $page $id
 }
 
 # The font catalogue, as the dump lists it: the persisted key and the label
@@ -601,6 +610,7 @@ proc ::rcsettings::ui::form::on_pick {id} {
     # that print the same words (the bundled JetBrains Mono and a system
     # install of it), and only their position tells them apart.
     set_value $id [lindex [dict get $row names] $i]
+    if {$id eq "screen.font_name"} { refresh_row general.font_size }
 }
 
 proc ::rcsettings::ui::form::on_colour {id} {
@@ -665,7 +675,8 @@ proc ::rcsettings::ui::form::refresh_row {id} {
             }
             int {
                 set Value($id) $value
-                [dict get $row readout] configure -text ""
+                [dict get $row readout] configure -text [expr {
+                    $id eq "general.font_size" ? [size_readout $value] : ""}]
             }
             bool {
                 # A plain boolean (empty arg) is what the file spells
@@ -709,6 +720,17 @@ proc ::rcsettings::ui::form::refresh_row {id} {
     [dict get $row pin] configure \
         -style [expr {$pinned ? "Pin.TLabel" : "Unpinned.TLabel"}]
     [dict get $row reset] state [expr {$pinned ? "!disabled" : "disabled"}]
+}
+
+# What the chosen face draws at display scale 1: a pixel face is magnified by
+# the whole number nearest the setting.
+proc ::rcsettings::ui::form::size_readout {n} {
+    if {![string is integer -strict $n]} { return "" }
+    lassign [::rcsettings::model::face_size \
+        [::rcsettings::model::effective screen font_name]] size low
+    if {$low ne "true"} { return "$n px" }
+    set m [expr {max(1, round(double($n) / $size))}]
+    return "[expr {$size * $m}] px ($size × $m)"
 }
 
 proc ::rcsettings::ui::form::show_number {id value} {

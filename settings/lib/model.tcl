@@ -30,7 +30,7 @@ namespace eval ::rcsettings::model {
         ssh_default ssh_hosts set_ssh_default add_ssh_host remove_ssh_host \
         set_ssh_host \
         load_schema shipped has_default table_keys preset_names has_preset \
-        preset enum enum_names fonts system_fonts system_fonts_text
+        preset enum enum_names fonts face_size system_fonts system_fonts_text
 
     # The whole model is one document: the GUI edits a single config
     # file, so there is nothing to instantiate.
@@ -114,12 +114,13 @@ namespace eval ::rcsettings::model {
         return $out
     }
 
-    # {catalogue_key display_name} pairs from parsed `[[fonts]]` rows. The
-    # bundled catalogue and the machine's own faces are the same shape.
+    # {catalogue_key display_name pixel_size low_resolution} per parsed
+    # `[[fonts]]` row, for the bundled catalogue and the machine's faces alike.
     proc font_pairs {entries} {
         return [lmap entry $entries {
             list [::tomledit::plain [dict get $entry name]] \
-                [::tomledit::plain [dict get $entry text]]
+                [::tomledit::plain [dict get $entry text]] \
+                [dict get $entry pixel_size] [dict get $entry low_resolution]
         }]
     }
 
@@ -171,10 +172,18 @@ namespace eval ::rcsettings::model {
         return [dict get $Presets $axis $name]
     }
 
-    # The bundled catalogue: {catalogue_key display_name} pairs.
+    # The bundled catalogue: {catalogue_key display_name pixel_size
+    # low_resolution} per face.
     proc fonts {} {
         variable Fonts
         return $Fonts
+    }
+
+    # {pixel_size low_resolution}; a face the listing lacks is a system face.
+    proc face_size {name} {
+        variable Fonts
+        set f [lsearch -inline -index 0 -exact $Fonts $name]
+        expr {$f eq "" ? "32 false" : [lrange $f 2 3]}
     }
 
     proc enum_names {} {
