@@ -3,16 +3,16 @@
 //! `tests/fixtures/golden-fonts.json` and `tests/fixtures/led/*.png` are
 //! golden files: recorded expected output the tests hold the renderer to,
 //! not a derivation of anything. The JSON pins every field `font_by_name()`
-//! returns for each bundled entry, plus `compute_font()`'s output for five
-//! knob settings; the PNGs pin the raster `led_text_image()` produces for a
-//! fixed string, one per bundled font. Re-baselining, should the renderer's
-//! output ever need to move, means blessing its current output into these
-//! fixtures in place.
+//! returns for each bundled entry, plus `sizing::resolve()`'s output for five
+//! pairs of type size and density; the PNGs pin the raster `led_text_image()`
+//! produces for a fixed string, one per bundled font. Re-baselining, should
+//! the renderer's output ever need to move, means blessing its current output
+//! into these fixtures in place.
 //!
-//! Two halves:
+//! Three parts:
 //!   * `metrics_table_matches_golden`: every field `font_by_name()` returns,
-//!     for every bundled entry, plus the `compute_font()` rows for five
-//!     knob settings;
+//!     for every bundled entry;
+//!   * `resolved_font_matches_golden`: the `sizing::resolve()` rows;
 //!   * `led_raster_rmse_against_golden`: per-font RMSE of the
 //!     `led_text_image()` raster against the golden PNG.
 
@@ -150,26 +150,30 @@ fn scaled_metrics_match_golden() {
 }
 
 #[test]
-fn computed_font_matches_golden() {
+fn resolved_font_matches_golden() {
     let g = golden();
     for row in g["fonts"].as_array().unwrap() {
         let name = row["name"].as_str().unwrap();
         let entry = fonts::font_by_name(name, fonts::FontSource::Bundled).unwrap();
         for c in row["computed"].as_array().unwrap() {
             let req = sizing::SizingRequest {
-                font_scaling: c["in_fontScaling"].as_f64().unwrap(),
-                base_font_scaling: c["in_baseFontScaling"].as_f64().unwrap(),
+                font_size: c["in_fontSize"].as_u64().unwrap() as u32,
+                device_pixel_ratio: c["in_dpr"].as_f64().unwrap(),
                 line_spacing: c["in_lineSpacing"].as_f64().unwrap(),
                 font_width: c["in_fontWidth"].as_f64().unwrap(),
-                ..Default::default()
             };
-            let got = sizing::compute_font(entry, &req);
-            let ctx = format!("{name} @ {}", c["in_fontScaling"]);
+            let got = sizing::resolve(entry, &req);
+            let ctx = format!("{name} @ {} x {}", c["in_fontSize"], c["in_dpr"]);
             assert_eq!(got.family, c["family"].as_str().unwrap(), "{ctx}: family");
             assert_eq!(
-                got.pixel_size as i64,
-                c["pixelSize"].as_i64().unwrap(),
-                "{ctx}: pixelSize"
+                got.raster_pixel_size as i64,
+                c["rasterPixelSize"].as_i64().unwrap(),
+                "{ctx}: rasterPixelSize"
+            );
+            assert_eq!(
+                got.integer_scale as i64,
+                c["integerScale"].as_i64().unwrap(),
+                "{ctx}: integerScale"
             );
             assert_eq!(
                 got.line_spacing as i64,
@@ -182,15 +186,9 @@ fn computed_font_matches_golden() {
                 "{ctx}: fallbackFontFamily"
             );
             assert_eq!(
-                got.low_resolution,
-                c["lowResolutionFont"].as_bool().unwrap(),
-                "{ctx}: lowResolutionFont"
-            );
-            assert!(
-                (got.screen_scaling - c["screenScaling"].as_f64().unwrap()).abs() < 1e-12,
-                "{ctx}: screenScaling {} != {}",
-                got.screen_scaling,
-                c["screenScaling"]
+                got.antialias,
+                c["antialias"].as_bool().unwrap(),
+                "{ctx}: antialias"
             );
             assert!(
                 (got.font_width - c["fontWidth"].as_f64().unwrap()).abs() < 1e-12,
