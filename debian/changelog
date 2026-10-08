@@ -1,3 +1,36 @@
+robco-term (0.3.0) unstable; urgency=medium
+
+  * The cabinet is the window's handle. Drag the bezel, the margin around
+    the text, or the casting beside the channel bank, and the window
+    moves; a drag on the text selects, as before.
+  * Every chord is a row in a [bindings] table in the config file, in
+    Rio's syntax: a row on a shipped trigger replaces it, a new trigger
+    joins. Ctrl+Shift+B folds the channel bank away and brings it back.
+  * Ctrl+click (Cmd+click on macOS) opens the link under the pointer, an
+    OSC 8 hyperlink or a URL in the text. While the chord is held the
+    link is underlined and the pointer is a hand; a press that travels
+    selects the link's text instead.
+  * A second face for prose. --prose-font names a proportional family,
+    and a row with nothing to line up is set in it, each character at
+    its own width; rows that match screen.monospace_trigger (box
+    drawing, bars, rules, a run of spaces after text) keep the
+    configured face. screen.prose_scaling sizes the prose face against
+    it. --font picks the configured face for the life of the process.
+  * The wheel scrolls a pager or an editor on the alternate screen: it
+    sends the arrow keys, three lines to the notch.
+  * A paste cannot write the escape that ends a paste. Clipboard text
+    carrying the end-of-paste marker closed the bracket early, and a
+    shell took the rest as typing.
+  * The cursor stays visible inside a selection, on a reverse-video
+    cell, and on a light plate: it takes whichever of its colours stands
+    farther from the plate under it, and is redrawn with its row.
+  * A hovered link on text the program had already underlined shows its
+    line.
+  * Choosing a wider system font in the settings window no longer ends
+    the process: the window's floor settles before its boundary.
+
+ -- Weiwu Zhang <a@colourful.land>  Thu, 08 Oct 2026 21:46:25 +1000
+
 robco-term (0.2.3) unstable; urgency=medium
 
   * Critters come on the clock. One crosses the glass at the start of
