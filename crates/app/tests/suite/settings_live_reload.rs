@@ -5,12 +5,12 @@
 //!
 //! 1. Editing the config file (atomic write-temp-then-rename, per the
 //!    machine-write contract) delivers the new value to `handle.current()`
-//!    without restarting the process, using `general.font_scaling` (font
-//!    size) as the proof key.
+//!    without restarting the process, using `general.font_size` as the
+//!    proof key.
 //! 2. An invalid edit keeps the last-good value and logs loudly.
 //! 3. SIGUSR1 forces a reload, independent of the filesystem watch.
 //! 4. The parameter/structural classification lines up with a live edit:
-//!    a font_scaling change classifies `Structural` (it resizes the glyph
+//!    a font_size change classifies `Structural` (it resizes the glyph
 //!    atlas, which forces a chain rebuild); a brightness-only change
 //!    classifies `Parameter` (a plain uniform push).
 
@@ -110,20 +110,20 @@ fn file_edit_reaches_the_settings_handle_without_restart() {
     })
     .expect("watcher should start");
 
-    let default_font_scaling = config::Config::default().general.font_scaling;
-    assert_eq!(handle.current().general.font_scaling, default_font_scaling);
+    let default_font_size = config::Config::default().general.font_size;
+    assert_eq!(handle.current().general.font_size, default_font_size);
 
-    // Font size (`general.font_scaling`) is this test's proof key.
-    write_atomic(&path, "[general]\nfont_scaling = 2.5\n");
+    // `general.font_size` is this test's proof key.
+    write_atomic(&path, "[general]\nfont_size = 30\n");
 
     assert!(
         wait_until(
-            || handle.current().general.font_scaling == 2.5,
+            || handle.current().general.font_size == 30,
             Duration::from_secs(5)
         ),
         "editing the config file did not reach the settings handle within the timeout; \
          current value is {}",
-        handle.current().general.font_scaling
+        handle.current().general.font_size
     );
 
     // Font size resizes the glyph atlas, so it is structural per the split
@@ -172,10 +172,10 @@ fn invalid_edit_keeps_last_good_and_logs() {
     init_logger();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.toml");
-    fs::write(&path, "[general]\nfont_scaling = 1.5\n").unwrap();
+    fs::write(&path, "[general]\nfont_size = 28\n").unwrap();
 
     let handle = SettingsHandle::spawn(path.clone(), |_, _, _| {}).expect("watcher should start");
-    assert_eq!(handle.current().general.font_scaling, 1.5);
+    assert_eq!(handle.current().general.font_size, 28);
 
     let messages_before = messages().lock().unwrap().len();
     write_atomic(&path, "this is not [valid toml at all");
@@ -192,8 +192,8 @@ fn invalid_edit_keeps_last_good_and_logs() {
     );
 
     assert_eq!(
-        handle.current().general.font_scaling,
-        1.5,
+        handle.current().general.font_size,
+        28,
         "last-good value must survive an unparseable write"
     );
 
@@ -204,9 +204,9 @@ fn invalid_edit_keeps_last_good_and_logs() {
     );
 
     // A subsequent good write still recovers normally.
-    write_atomic(&path, "[general]\nfont_scaling = 3.0\n");
+    write_atomic(&path, "[general]\nfont_size = 36\n");
     assert!(wait_until(
-        || handle.current().general.font_scaling == 3.0,
+        || handle.current().general.font_size == 36,
         Duration::from_secs(5)
     ));
 }
@@ -217,7 +217,7 @@ fn sigusr1_forces_a_reload() {
     init_logger();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.toml");
-    fs::write(&path, "[general]\nfont_scaling = 1.0\n").unwrap();
+    fs::write(&path, "[general]\nfont_size = 24\n").unwrap();
 
     let handle =
         Arc::new(SettingsHandle::spawn(path.clone(), |_, _, _| {}).expect("watcher should start"));
@@ -227,12 +227,12 @@ fn sigusr1_forces_a_reload() {
     // on the signal before we raise it.
     std::thread::sleep(Duration::from_millis(100));
 
-    assert_eq!(handle.current().general.font_scaling, 1.0);
+    assert_eq!(handle.current().general.font_size, 24);
 
     // Write in place (not via write-temp-then-rename) so this test does not
     // depend on the directory watcher having already picked the change up;
     // SIGUSR1 must force the reload on its own.
-    fs::write(&path, "[general]\nfont_scaling = 4.0\n").unwrap();
+    fs::write(&path, "[general]\nfont_size = 40\n").unwrap();
 
     // SAFETY: `libc::raise` sends a signal to the current process; this is
     // exactly the "for scripts" use case the config contract names for
@@ -242,11 +242,11 @@ fn sigusr1_forces_a_reload() {
 
     assert!(
         wait_until(
-            || handle.current().general.font_scaling == 4.0,
+            || handle.current().general.font_size == 40,
             Duration::from_secs(5)
         ),
         "SIGUSR1 did not force a reload within the timeout; current value is {}",
-        handle.current().general.font_scaling
+        handle.current().general.font_size
     );
 }
 

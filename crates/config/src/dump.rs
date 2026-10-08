@@ -29,12 +29,14 @@ use crate::schema::{
     ScreenSettings, SelectionModel, Shell, CritterTiming,
 };
 
-/// One font catalogue entry: the key settings persist and the label a menu
-/// shows for it.
+/// One font catalogue entry: the key settings persist, the label a menu
+/// shows for it, and the native size and class the size readout needs.
 #[derive(Debug, Clone, Serialize)]
 pub struct FontListing {
     pub name: String,
     pub text: String,
+    pub pixel_size: u32,
+    pub low_resolution: bool,
 }
 
 #[derive(Serialize)]
@@ -173,6 +175,8 @@ mod tests {
         let text = dump(vec![FontListing {
             name: "TERMINESS_SCALED".into(),
             text: "Terminess".into(),
+            pixel_size: 12,
+            low_resolution: true,
         }]);
         let doc: toml_edit::DocumentMut = text.parse().expect("dump is valid TOML");
 
@@ -210,6 +214,8 @@ mod tests {
         let text = dump_fonts_only(vec![FontListing {
             name: "DejaVu Sans Mono".into(),
             text: "DejaVu Sans Mono".into(),
+            pixel_size: 32,
+            low_resolution: false,
         }]);
         let doc: toml_edit::DocumentMut = text.parse().expect("dump is valid TOML");
         let fonts = doc["fonts"].as_array_of_tables().unwrap();

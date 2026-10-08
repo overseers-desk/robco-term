@@ -76,6 +76,8 @@ fn listings(fonts: &[term::FontEntry]) -> Vec<config::dump::FontListing> {
         .map(|f| config::dump::FontListing {
             name: f.name.to_string(),
             text: f.text.to_string(),
+            pixel_size: f.pixel_size,
+            low_resolution: f.low_resolution,
         })
         .collect()
 }
@@ -286,8 +288,8 @@ fn main() -> ExitCode {
             profile.clone(),
             |_old, new, class| {
                 log::debug!(
-                    "settings applied ({class:?}); font_scaling={} bloom={}",
-                    new.general.font_scaling,
+                    "settings applied ({class:?}); font_size={} bloom={}",
+                    new.general.font_size,
                     new.screen.bloom
                 );
             },

@@ -404,9 +404,9 @@ impl SettingsHandle {
             ConfigWatcher::spawn_with_loader(&path, initial, load, move |new: &Config| {
                 let class = classify(&previous, new);
                 log::info!(
-                    "robco-term: config reloaded from {} ({class:?}); font_scaling={}",
+                    "robco-term: config reloaded from {} ({class:?}); font_size={}",
                     log_path.display(),
-                    new.general.font_scaling
+                    new.general.font_size
                 );
                 on_change(&previous, new, class);
                 previous = new.clone();
@@ -692,13 +692,13 @@ mod tests {
     }
 
     #[test]
-    fn font_scaling_change_is_structural() {
+    fn font_size_change_is_structural() {
         // Font size resizes the glyph atlas and the grid's cell geometry,
         // so it is one of the "scale" structural triggers, not a plain
         // uniform push.
         let old = Config::default();
         let mut new = old.clone();
-        new.general.font_scaling = 2.0;
+        new.general.font_size = 30;
         assert_eq!(classify(&old, &new), KeyClass::Structural);
     }
 

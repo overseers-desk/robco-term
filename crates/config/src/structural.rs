@@ -10,7 +10,7 @@
 //! count, framebuffer format, scale):
 //!
 //! - **Scale / geometry that resizes a framebuffer or glyph atlas**:
-//!   `general.window_scaling`, `general.font_scaling`, `screen.font_width`,
+//!   `general.window_scaling`, `general.font_size`, `screen.font_width`,
 //!   `screen.line_spacing`, `screen.margin`, `screen.frame_size`,
 //!   `chassis.frame_size`.
 //! - **Framebuffer format/resolution** (the bloom and burn-in passes each
@@ -52,7 +52,7 @@ pub enum KeyClass {
 /// Everything not listed here is `Parameter`.
 pub const STRUCTURAL: &[&str] = &[
     "general.window_scaling",
-    "general.font_scaling",
+    "general.font_size",
     "general.bloom_quality",
     "general.burn_in_quality",
     "general.chassis_shown",

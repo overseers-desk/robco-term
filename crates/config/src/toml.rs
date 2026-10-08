@@ -709,7 +709,7 @@ name = \"Default Amber\"\n\
     fn an_empty_document_resolves_to_the_frozen_default() {
         assert_eq!(resolved(""), Config::default());
         assert_eq!(
-            resolved("[general]\nfont_scaling = 2.0\n").screen,
+            resolved("[general]\nfont_size = 30\n").screen,
             ScreenSettings::default()
         );
     }

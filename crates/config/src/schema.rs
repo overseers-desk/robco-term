@@ -35,7 +35,8 @@ pub struct GeneralSettings {
     pub effects_frame_skip: i32,
     pub window_scaling: f64,
     pub show_terminal_size: bool,
-    pub font_scaling: f64,
+    /// Height of the type in logical pixels.
+    pub font_size: u32,
     /// Carried for schema parity with the frozen v1 shape; this build has
     /// no menubar and nothing reads the key (docs/config.md, `[general]`).
     /// Wiring it is a deliberately open design fork, not a gap in this
@@ -217,7 +218,7 @@ impl Default for GeneralSettings {
             effects_frame_skip: 3,
             window_scaling: 1.0,
             show_terminal_size: true,
-            font_scaling: 1.0,
+            font_size: 24,
             show_menubar: false,
             bloom_quality: 0.5,
             burn_in_quality: 0.5,

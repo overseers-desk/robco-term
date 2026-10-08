@@ -23,6 +23,9 @@ use crate::pacing::FrameTime;
 const SCREEN_CURVATURE_SIZE: f32 = 0.6;
 /// The noise texture is 512x512.
 const NOISE_TEXTURE_SIZE: f32 = 512.0;
+/// The type size, in logical pixels, the shaders' displacement constants
+/// were tuned at.
+pub const REFERENCE_FONT_SIZE: f32 = 32.0;
 
 /// The frame's measurements, which the settings alone do not give.
 ///
@@ -36,8 +39,8 @@ const NOISE_TEXTURE_SIZE: f32 = 512.0;
 /// baked into the size.
 ///
 /// `virtual_*` is neither: it is a count of raster pixels, which is
-/// device-independent by construction. `total_font_scaling` is the product
-/// of the base font scaling and the font scaling setting.
+/// device-independent by construction. `total_font_scaling` is the type size
+/// over [`REFERENCE_FONT_SIZE`].
 ///
 /// The app fills this from its window and its font stack; the tests fill it
 /// with whatever makes an assertion legible.

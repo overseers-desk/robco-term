@@ -80,7 +80,7 @@ use config::{Config, CritterSettings, CritterTiming};
 use critters::Critters;
 use crt::{Chain, Degauss, Geometry, Pacing, Params};
 use term::distortion;
-use term::fonts::sizing::{ScalePolicy, SizingRequest};
+use term::fonts::sizing::SizingRequest;
 use term::hotspots::UrlFilterChain;
 use term::rio_vt::crosswords::pos::Side;
 use term::rio_vt::crosswords::Mode;
@@ -171,12 +171,6 @@ pub const SHED_SSH: &str = "ssh input dropped";
 /// the dark screen is, and the one thing to do about it. No timer.
 pub const NO_SIGNAL: [&str; 2] = ["no channel on this bank", "Ctrl+Shift+T starts one"];
 
-/// Not a config key: a fixed multiplier applied to the stored `fontScaling`.
-/// `SizingRequest::default()` carries the same 0.75, and this name exists so
-/// the one place that needs the product for a shader uniform
-/// (`totalFontScaling`) does not restate the number.
-const BASE_FONT_SCALING: f64 = 0.75;
-
 /// The chain's geometry, from a physical render target and the window it is
 /// drawn in. The arithmetic of [`Glass::geometry`], with nothing in it that
 /// needs a device, so the unit conversion can be measured without one.
@@ -199,7 +193,7 @@ fn chain_geometry(
         output_height: height / ratio,
         virtual_width: (width / (scale * font_width)).floor().max(1.0),
         virtual_height: (height / scale).floor().max(1.0),
-        total_font_scaling: (BASE_FONT_SCALING * cfg.general.font_scaling) as f32,
+        total_font_scaling: cfg.general.font_size as f32 / crt::params::REFERENCE_FONT_SIZE,
         device_pixel_ratio: ratio,
     }
 }
@@ -294,12 +288,10 @@ fn spawn(config: &SessionConfig, size: term::TermSize) -> Option<AppSession> {
 /// The sizing knobs, as this window's settings and monitor set them.
 fn sizing_request(cfg: &Config, scale_factor: f64) -> SizingRequest {
     SizingRequest {
-        font_scaling: cfg.general.font_scaling,
+        font_size: cfg.general.font_size,
         line_spacing: cfg.screen.line_spacing,
         font_width: cfg.screen.font_width,
-        window_scaling: cfg.general.window_scaling,
         device_pixel_ratio: scale_factor,
-        ..SizingRequest::default()
     }
 }
 
@@ -314,7 +306,7 @@ fn sizing_request(cfg: &Config, scale_factor: f64) -> SizingRequest {
 pub fn well_minimum_for(cfg: &Config, scale_factor: f64) -> (u32, u32) {
     let entry = font_entry(cfg);
     let request = sizing_request(cfg, scale_factor);
-    let resolved = term::resolve(entry, &request, ScalePolicy::Floor);
+    let resolved = term::resolve(entry, &request);
     let cell = logical_cell(
         FontContext::new(entry).cell_metrics(&resolved),
         &resolved,
@@ -674,8 +666,7 @@ impl Glass {
     fn new(gpu: &Gpu, cfg: &Config, viewport: &Viewport, identity: &str) -> Option<Self> {
         let entry = font_entry(cfg);
         let request = sizing_request(cfg, viewport.scale_factor);
-        let (resolved, font, atlas) =
-            term::build_font(&gpu.device, &gpu.queue, entry, &request, ScalePolicy::Floor);
+        let (resolved, font, atlas) = term::build_font(&gpu.device, &gpu.queue, entry, &request);
 
         let size = viewport.term_size();
         // White on black, and the phosphor nowhere in it: the chain's last
@@ -855,7 +846,7 @@ impl TerminalSurface {
         let entry = font_entry(&cfg);
         let scale_factor = window.scale_factor();
         let request = sizing_request(&cfg, scale_factor);
-        let resolved = term::resolve(entry, &request, ScalePolicy::Floor);
+        let resolved = term::resolve(entry, &request);
         let cell = logical_cell(
             FontContext::new(entry).cell_metrics(&resolved),
             &resolved,
@@ -1685,13 +1676,13 @@ impl TerminalSurface {
     /// atlas holds. Returns whether anything moved.
     ///
     /// The comparison is on the *resolved* font and not on the setting: two
-    /// different `font_scaling` values that floor to the same integer scale
+    /// type sizes that round to the same magnification of a pixel face
     /// rasterise the same atlas, and rebuilding it for them would throw the
     /// burn-in ghost away for no visible reason.
     fn ensure_font(&mut self, cfg: &Config) -> bool {
         let entry = font_entry(cfg);
         let request = sizing_request(cfg, self.viewport.scale_factor);
-        let resolved = term::resolve(entry, &request, ScalePolicy::Floor);
+        let resolved = term::resolve(entry, &request);
 
         match self.glass.as_ref() {
             Some(glass) if glass.font_name == entry.name && glass.resolved == resolved => {
@@ -1709,8 +1700,7 @@ impl TerminalSurface {
             self.viewport.scale_factor,
         );
         if let (Some(gpu), Some(glass)) = (self.gpu.as_ref(), self.glass.as_mut()) {
-            let (_, font, atlas) =
-                term::build_font(&gpu.device, &gpu.queue, entry, &request, ScalePolicy::Floor);
+            let (_, font, atlas) = term::build_font(&gpu.device, &gpu.queue, entry, &request);
             glass.renderer.set_scale(resolved.integer_scale);
             glass.renderer.set_atlas(&gpu.device, &gpu.queue, atlas);
             glass.font = font;

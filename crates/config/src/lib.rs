@@ -48,7 +48,7 @@ pub use schema::{
 /// diff-against-defaults contract in `docs/config-format.md` hold for a
 /// *partial* file, not just a missing one: without it, serde requires every
 /// field of a struct present in the input, so a file containing only
-/// `[general]\nfont_scaling = 2.0` would fail to deserialize entirely (an
+/// `[general]\nfont_size = 30` would fail to deserialize entirely (an
 /// `[general]` table missing ten other required keys), rather than filling
 /// them in from `GeneralSettings::default()`. `read_document`/`deserialize`
 /// in `toml.rs` already handle a wholly-missing *file* correctly (empty
@@ -314,10 +314,10 @@ key = "/home/overseer/.ssh/id_gw"
     /// told otherwise).
     #[test]
     fn a_single_changed_key_deserializes_with_every_other_key_defaulted() {
-        let partial = "[general]\nfont_scaling = 2.0\n";
+        let partial = "[general]\nfont_size = 30\n";
         let restored: Config = toml::from_str(partial).unwrap();
         let mut expected = Config::default();
-        expected.general.font_scaling = 2.0;
+        expected.general.font_size = 30;
         assert_eq!(restored, expected);
     }
 

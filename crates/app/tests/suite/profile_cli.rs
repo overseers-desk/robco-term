@@ -359,20 +359,17 @@ fn a_general_key_survives_a_relaunch_under_a_saved_profile() {
     std::fs::create_dir_all(live.parent().unwrap()).unwrap();
     std::fs::write(
         &live,
-        "[general]\nfont_scaling = 2.5\n\n[screen]\nname = \"Deep Blue\"\nbloom = 0.9\n",
+        "[general]\nfont_size = 30\n\n[screen]\nname = \"Deep Blue\"\nbloom = 0.9\n",
     )
     .unwrap();
 
-    let default_scaling = config::Config::default().general.font_scaling;
-    assert_ne!(
-        default_scaling, 2.5,
-        "the proof key must differ from default"
-    );
+    let default_size = config::Config::default().general.font_size;
+    assert_ne!(default_size, 30, "the proof key must differ from default");
 
     // Save the look under a name, the way the settings window would.
     let handle =
         settings::SettingsHandle::spawn(live.clone(), |_, _, _| {}).expect("watcher should start");
-    assert_eq!(handle.current().general.font_scaling, 2.5);
+    assert_eq!(handle.current().general.font_size, 30);
     handle.save_profile_as("workshop").expect("save the look");
     drop(handle);
 
@@ -388,7 +385,7 @@ fn a_general_key_survives_a_relaunch_under_a_saved_profile() {
 
     // The general key the user set is still theirs...
     assert_eq!(
-        config.general.font_scaling, 2.5,
+        config.general.font_size, 30,
         "naming a look took the user's general settings away"
     );
     // ...and the look the flag named is on.
