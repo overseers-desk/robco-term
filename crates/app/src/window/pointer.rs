@@ -109,8 +109,7 @@ impl TerminalSurface {
     /// seam between two cells, so a drag begun on the right half of a
     /// character starts after that character. The Konsole model ignores it.
     fn cell_side_at(&self, position: PhysicalPosition<f64>) -> ((usize, usize), Side) {
-        let x = position.x - f64::from(self.bank_physical());
-        let point = correct_distortion(x, position.y, &self.distortion_params());
+        let point = self.grid_point(position);
         let size = self.viewport.term_size();
         let (column, side) = size.column_side_at(point.x);
         // The picture is drawn shifted up by the position's fraction of a
@@ -126,6 +125,23 @@ impl TerminalSurface {
         };
         let row = row.clamp(0.0, last as f64) as usize;
         ((column, self.top_line() + row), side)
+    }
+
+    /// A window pixel in the grid's own space: past the bank column and
+    /// through the inverse distortion, measured from the grid's corner.
+    fn grid_point(&self, position: PhysicalPosition<f64>) -> distortion::Point {
+        let x = position.x - f64::from(self.bank_physical());
+        correct_distortion(x, position.y, &self.distortion_params())
+    }
+
+    /// Whether a window pixel lands outside the grid's rectangle: on the
+    /// margin, the bezel, or the bank's casting. The picture slides inside
+    /// that rectangle while scrolled, so the test is on the rectangle, not
+    /// the row.
+    fn off_grid(&self, position: PhysicalPosition<f64>) -> bool {
+        let point = self.grid_point(position);
+        let (width, height) = self.viewport.term_size().pixel_size();
+        !(0.0..f64::from(width)).contains(&point.x) || !(0.0..f64::from(height)).contains(&point.y)
     }
 
     /// How far up the picture is drawn from the grid's rectangle, in
@@ -336,6 +352,17 @@ impl TerminalSurface {
             || self.pager_pressed(button, position)
         {
             log::debug!("{button:?} press at {position:?} taken by the cabinet");
+            return;
+        }
+        // The last claim before the grid: a left press on the cabinet
+        // anywhere else -- the margin, the bezel, the bank's casting -- is
+        // the handle the window is picked up by. The window manager takes
+        // the gesture from here, and may keep the release.
+        if button == MouseButton::Left && self.off_grid(position) {
+            log::debug!("{button:?} press at {position:?} off the grid; the window is dragged");
+            if let Some(Err(e)) = self.window.as_ref().map(|window| window.drag_window()) {
+                log::debug!("could not drag the window: {e}");
+            }
             return;
         }
         let Some(button) = pointer_button(button) else {

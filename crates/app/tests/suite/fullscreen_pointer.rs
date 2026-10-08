@@ -203,13 +203,27 @@ fn drag(
     surface.last_selection().unwrap_or_default().to_string()
 }
 
-/// A quarter of the way across the glass to three quarters of the way across
-/// it, along the middle row.
-fn across(width: u32, height: u32) -> (PhysicalPosition<f64>, PhysicalPosition<f64>) {
+/// The bank column's width in window pixels: where the well starts.
+fn bank(surface: &TerminalSurface, scale: f64) -> f64 {
+    surface.cabinet().map_or(0.0, |c| f64::from(c.bank_width())) * scale
+}
+
+/// A quarter of the way across the well to three quarters of the way across
+/// it, along the middle row. Measured over the well and not the window,
+/// because a window narrow enough stands a quarter of its width inside the
+/// bank, and a press there picks the window up instead of marking.
+fn across(
+    surface: &TerminalSurface,
+    width: u32,
+    height: u32,
+    scale: f64,
+) -> (PhysicalPosition<f64>, PhysicalPosition<f64>) {
+    let bank = bank(surface, scale);
+    let well = f64::from(width) - bank;
     let y = f64::from(height) * 0.5;
     (
-        PhysicalPosition::new(f64::from(width) * 0.25, y),
-        PhysicalPosition::new(f64::from(width) * 0.75, y),
+        PhysicalPosition::new(bank + well * 0.25, y),
+        PhysicalPosition::new(bank + well * 0.75, y),
     )
 }
 
@@ -218,7 +232,7 @@ fn a_drag_across_the_glass_marks_it_at_every_shape_a_fullscreen_window_takes() {
     for &(name, width, height, scale) in SCREENS {
         let mut surface = surface(width, height, scale);
         let cols = wait_for_a_full_screen(&mut surface);
-        let (from, to) = across(width, height);
+        let (from, to) = across(&surface, width, height, scale);
 
         let marked = drag(&mut surface, from, to, shift());
         assert!(
@@ -235,7 +249,7 @@ fn the_bank_and_the_curvature_do_not_take_the_drag_at_any_shape() {
     for &(name, width, height, scale) in SCREENS {
         let (mut surface, _dir) = dressed(width, height, scale, scripted(width, height, scale));
         let cols = wait_for_a_full_screen(&mut surface);
-        let (from, to) = across(width, height);
+        let (from, to) = across(&surface, width, height, scale);
 
         let marked = drag(&mut surface, from, to, shift());
         assert!(
@@ -247,21 +261,20 @@ fn the_bank_and_the_curvature_do_not_take_the_drag_at_any_shape() {
     }
 }
 
-/// The press that starts where the glass does. The seam's grab strip stands on
-/// the bank's right edge and gets first refusal on every press, so a drag
-/// beginning a few cells clear of it is the closest a selection can legally
-/// start -- and the bank stands at a different width fullscreen than windowed,
-/// because a window narrow enough fits the bank down and a full screen does
-/// not.
+/// The press that starts where the text does. The bezel between the bank and
+/// the grid is the window's handle, so a drag beginning a fifth of the way
+/// into the well is about the closest a selection can start -- and the bank
+/// stands at a different width fullscreen than windowed, because a window
+/// narrow enough fits the bank down and a full screen does not.
 #[test]
 fn a_drag_that_starts_beside_the_bank_marks_at_every_shape() {
     for &(name, width, height, scale) in SCREENS {
         let (mut surface, _dir) = dressed(width, height, scale, scripted(width, height, scale));
         let cols = wait_for_a_full_screen(&mut surface);
-        let bank = surface.cabinet().map_or(0.0, |c| f64::from(c.bank_width())) * scale;
+        let bank = bank(&surface, scale);
 
         let y = f64::from(height) * 0.5;
-        let from = PhysicalPosition::new(bank + 4.0 * CELL_W * scale, y);
+        let from = PhysicalPosition::new(bank + (f64::from(width) - bank) * 0.2, y);
         let to = PhysicalPosition::new(f64::from(width) * 0.6, y);
         let marked = drag(&mut surface, from, to, shift());
         assert!(
@@ -273,9 +286,10 @@ fn a_drag_that_starts_beside_the_bank_marks_at_every_shape() {
     }
 }
 
-/// Down the glass rather than across it. The vertical mapping has its own
-/// margin, its own frame inset and its own half of the radial term, and the
-/// row a press lands on is what decides whether a drag has moved at all.
+/// Down the glass rather than across it, from under the top bezel to above
+/// the bottom one. The vertical mapping has its own margin, its own frame
+/// inset and its own half of the radial term, and the row a press lands on
+/// is what decides whether a drag has moved at all.
 ///
 /// Measured in characters rather than lines: the screen is one wrapped stream,
 /// so it has no line breaks to count, and characters are the finer ruler
@@ -287,8 +301,8 @@ fn a_drag_down_the_glass_marks_the_rows_it_crossed() {
         let cols = wait_for_a_full_screen(&mut surface);
 
         let x = f64::from(width) * 0.5;
-        let from = PhysicalPosition::new(x, f64::from(height) * 0.05);
-        let to = PhysicalPosition::new(x, f64::from(height) * 0.95);
+        let from = PhysicalPosition::new(x, f64::from(height) * 0.15);
+        let to = PhysicalPosition::new(x, f64::from(height) * 0.85);
         let marked = drag(&mut surface, from, to, shift());
         assert!(
             marked.len() >= cols * 4,
@@ -317,7 +331,7 @@ fn shift_takes_the_pointer_back_from_the_program_at_every_shape() {
             surface.terminal_uses_mouse(),
             "{name}: test setup: the program should have taken the mouse"
         );
-        let (from, to) = across(width, height);
+        let (from, to) = across(&surface, width, height, scale);
 
         let unmodified = drag(&mut surface, from, to, ModifiersState::empty());
         assert!(
