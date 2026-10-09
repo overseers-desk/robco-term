@@ -9,6 +9,8 @@ The procedure that cut v0.1.0, kept current so the next cut repeats it instead o
 - [ ] All changes committed and pushed to main.
 - [ ] The release commit's CI run is green: `windows` proves the Windows build, including the settings payload's own `--settings-selftest`; `macos` proves the terminal and the settings image build there; `linux` builds the tarball and the deb and reads the package's dependencies back out. Every release asset is built fresh by `release.yml` when the tag is pushed, not carried over from this run.
 
+The tag push checks the first two: `release.yml` builds nothing when the tag, `Cargo.toml` and `debian/changelog` disagree.
+
 ## Where the Linux artifacts come from
 
 The tag push builds them: `release.yml`'s `linux` job builds the settings image, rolls the tarball, runs `dpkg-buildpackage`, and attaches both files. Its `lintian` step suppresses the findings this project accepts, the two missing manual pages and `bad-distribution-in-changes-file`, and fails on any other.

@@ -22,7 +22,24 @@ permissions:
   contents: write
 
 jobs:
+  # The tag names the assets, Cargo.toml names the binary and
+  # debian/changelog names the deb. The three agree, or nothing is built.
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y --no-install-recommends dpkg-dev
+      - name: the tag, Cargo.toml and debian/changelog name one version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "robco-app") | .version')"
+          deb="$(dpkg-parsechangelog -S Version)"
+          echo "tag $tag, Cargo.toml $cargo, debian/changelog $deb"
+          [ "$tag" = "$cargo" ] && [ "$tag" = "$deb" ]
+
   windows:
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +88,7 @@ jobs:
           gh release upload $tag "$env:EXE_PATH" --clobber
 
   macos:
+    needs: version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -113,6 +131,7 @@ jobs:
   # floor belongs to a decision recorded here, not to whichever machine
   # happened to run the build.
   linux:
+    needs: version
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
