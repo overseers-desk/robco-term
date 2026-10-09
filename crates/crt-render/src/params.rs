@@ -23,8 +23,8 @@ use crate::pacing::FrameTime;
 const SCREEN_CURVATURE_SIZE: f32 = 0.6;
 /// The noise texture is 512x512.
 const NOISE_TEXTURE_SIZE: f32 = 512.0;
-/// The type size, in logical pixels, the shaders' displacement constants
-/// were tuned at.
+/// The type size, in logical pixels, against which the shaders' displacement
+/// constants are stated.
 pub const REFERENCE_FONT_SIZE: f32 = 32.0;
 
 /// The frame's measurements, which the settings alone do not give.

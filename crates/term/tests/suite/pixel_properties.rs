@@ -15,9 +15,9 @@
 //!    duplication of the 1x render, pixel for pixel. Equality rather than
 //!    similarity: a one-pixel stem shift is invisible to a tolerance and
 //!    obvious on screen.
-//! 3. **DPR change mid-run.** The device pixel ratio moves, the atlas is not
-//!    rebuilt, the raster size does not move, and the output stays binary and
-//!    exactly duplicated.
+//! 3. **DPR change mid-run, under a pixel face.** The device pixel ratio
+//!    moves, the atlas is not rebuilt, the raster size does not move, and the
+//!    output stays binary and exactly duplicated.
 //!
 //! The counterexample, kept as a test of its own: re-rasterising at twice the
 //! size instead of scaling the geometry corrupts Terminess (3960 differing

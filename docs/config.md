@@ -196,7 +196,7 @@ effects that age them.
 | `font_name` | `"TERMINESS_SCALED"` | The glyph face, by catalogue key (see below). A key naming nothing falls back to the shipped default rather than refusing to draw. |
 | `font_source` | `"bundled_fonts"` | Present in the schema; nothing in this build reads it. |
 | `font_width` | `1.0` | Cell width as a multiple of the face's own. Bitmap faces want pixel-exact ratios. |
-| `line_spacing` | `0.1` | Extra height per row. |
+| `line_spacing` | `0.1` | Extra height per row, as a fraction of the glyph height the face draws. |
 | `margin` | `0.3` | Inset between the type and the bezel. |
 | `frame_size` | `0.1` | The tube's own moulding. Governs only when `general.chassis_shown` is off. |
 | `screen_radius` | `0.1` | Corner radius of that moulding, `4` to `120` pixels across the range. Governs only when `general.chassis_shown` is off. |

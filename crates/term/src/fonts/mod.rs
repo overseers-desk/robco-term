@@ -38,7 +38,9 @@ use std::sync::OnceLock;
 /// The rasterization value that means "modern": it selects the
 /// non-low-resolution half of the catalogue.
 pub const MODERN_RASTERIZATION: i32 = 4;
-/// The pixel size at which system (non-bundled) fonts render.
+/// The design size the catalogue records for a system (non-bundled) face.
+/// A scalable face is rasterised at the requested size, so this figure
+/// reaches only the font listing.
 pub const SYSTEM_FONT_PIXEL_SIZE: u32 = 32;
 
 /// Which half of the catalogue the font list offers.

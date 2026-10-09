@@ -58,7 +58,7 @@ pub struct ResolvedFont {
 }
 
 pub fn resolve(entry: &FontEntry, req: &SizingRequest) -> ResolvedFont {
-    let target = req.font_size as f64 * req.device_pixel_ratio;
+    let target = req.font_size.max(1) as f64 * req.device_pixel_ratio;
     let (raster_pixel_size, integer_scale) = if entry.low_resolution {
         let scale = (target / entry.pixel_size as f64).round() as u32;
         (entry.pixel_size, scale.max(1))

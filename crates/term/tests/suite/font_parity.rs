@@ -9,7 +9,7 @@
 //! the renderer's output ever need to move, means blessing its current output
 //! into these fixtures in place.
 //!
-//! Three parts:
+//! The parts:
 //!   * `metrics_table_matches_golden`: every field `font_by_name()` returns,
 //!     for every bundled entry;
 //!   * `resolved_font_matches_golden`: the `sizing::resolve()` rows;

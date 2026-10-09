@@ -265,7 +265,7 @@ pub struct GlyphAtlas {
     pub cell: CellMetrics,
     pub rasterization: Rasterization,
     /// The size everything in here was rasterised at. Recorded so a DPR change
-    /// can assert it did *not* move.
+    /// under a pixel face can assert it did *not* move.
     pub raster_pixel_size: u32,
     /// How many times the texture behind [`Self::view`] has been replaced,
     /// which happens when a glyph is appended past the allocated height.
