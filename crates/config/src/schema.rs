@@ -281,20 +281,13 @@ impl Default for ScreenSettings {
             // dashes, and a run of four or more spaces with something before
             // it on the row.
             //
-            // Why the run must have something before it. A run of spaces at
-            // the head of a row is indentation, and indentation needs no
-            // ruler: in a proportional face n spaces are n copies of one
-            // glyph, so every row indented by n starts its text at the same
-            // x by itself. Setting those rows in the mono face would gain
-            // nothing and lose the prose. A run further along the row is the
-            // case that needs the ruler, because what precedes it is a
-            // different width on every row, so in prose the column after it
-            // lands somewhere else on every row.
-            //
-            // That is the whole of the rule: `\S {4,}`, a run preceded by a
-            // non-space. `^ +` never matches it, which is the point. Nothing
-            // here counts characters before the run, and a rule that did
-            // would put indented prose in the mono face.
+            // A run of spaces at the head of a row is indentation, which
+            // needs no ruler: in a proportional face n spaces are n copies of
+            // one glyph, so rows indented by n start their text at the same x
+            // by themselves. A run after text does need it, because the text
+            // before it is a different width on every row, so in prose the
+            // column after it lands somewhere else on every row. Hence
+            // `\S {4,}`: a run preceded by a non-space.
             monospace_trigger: r"[|\x{2500}-\x{257F}]|-{3,}|={3,}|\S {4,}".to_string(),
             prose_scaling: 1.2,
             blinking_cursor: false,

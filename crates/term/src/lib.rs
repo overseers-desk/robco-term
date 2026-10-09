@@ -142,9 +142,8 @@ pub fn build_font(
 /// The family the prose role is set in, named once for the life of the
 /// process, or `None` for a grid set wholly in the configured face.
 ///
-/// Process-wide rather than a field, for the same reason the application
-/// keeps its `--font` that way: every window draws in it, and a window
-/// opened by a later handoff has no argument list of its own to read.
+/// Process-wide rather than a field: every window draws in it, and a window
+/// opened later has no argument list of its own to read it from.
 pub fn prose_family() -> Option<&'static str> {
     PROSE_FAMILY.get()?.as_deref()
 }
