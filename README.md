@@ -124,11 +124,11 @@ anywhere else:
 
 ```console
 $ cargo run -p xtask -- install --prefix ~/.local
-installed robco-term 0.1.0 to /home/you/.local
+installed robco-term <version> to /home/you/.local
   /home/you/.local/bin/robco-term
   /home/you/.local/share/applications/robco-term.desktop
   /home/you/.local/share/icons/hicolor/256x256/apps/robco-term.png
-  checked: robco-term 0.1.0 runs from the prefix with a clean HOME
+  checked: robco-term <version> runs from the prefix with a clean HOME
 ```
 
 Binary, desktop entry and icon: that is the whole installation. Everything
@@ -140,7 +140,7 @@ desktop entry launches by name.
 
 ```console
 $ cargo run -p xtask -- dist --out-dir dist
-wrote dist/robco-term-0.1.0-linux-x86_64.tar.gz (94.4 MiB)
+wrote dist/robco-term-<version>-linux-x86_64.tar.gz (94.4 MiB)
 ```
 
 It unpacks into one directory holding the same three files. Unpack it
@@ -150,10 +150,10 @@ wherever you like and run `bin/robco-term`.
 
 ```console
 $ dpkg-buildpackage -us -uc -b
-dpkg-deb: building package 'robco-term' in '../robco-term_0.1.0_amd64.deb'.
+dpkg-deb: building package 'robco-term' in '../robco-term_<version>_amd64.deb'.
 ```
 
-Then `sudo dpkg -i ../robco-term_0.1.0_amd64.deb`; the artifacts land in the
+Then `sudo dpkg -i ../robco-term_<version>_amd64.deb`; the artifacts land in the
 parent directory, which is dpkg-buildpackage's convention. It builds without
 root. One caveat worth stating: the
 dependency versions are the ones on the machine that built the package, so a
