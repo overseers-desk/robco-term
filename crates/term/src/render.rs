@@ -6,8 +6,9 @@
 //! * **Layout happens once, in unscaled raster pixels.** The instance buffer
 //!   holds cell-grid geometry at 1x; the magnification is a uniform. Scaling
 //!   therefore cannot perturb the layout, because the layout has already
-//!   happened, and a DPR change costs one uniform write rather than a rebuild
-//!   of the atlas. The counterexample makes the property concrete:
+//!   happened, and under a pixel face a DPR change costs one uniform write
+//!   rather than a rebuild of the atlas. The counterexample makes the
+//!   property concrete:
 //!   re-rasterising Terminess at twice the size instead of scaling its
 //!   geometry moved 3960 pixels.
 //! * **The instance array is a fixed grid**, four blocks of `cols * rows` plus
@@ -443,9 +444,9 @@ impl GridRenderer {
     /// The magnification, as an integer. Everything the sizing seam decides
     /// arrives here: `ResolvedFont::integer_scale`.
     ///
-    /// Nothing is rebuilt. That is the whole point: a monitor change moves
-    /// this number and the atlas, the layout and the instance buffer all stay
-    /// exactly as they were.
+    /// Nothing is rebuilt. That is the whole point: under a pixel face a
+    /// monitor change moves this number and the atlas, the layout and the
+    /// instance buffer all stay exactly as they were.
     pub fn set_scale(&mut self, scale: u32) {
         assert!(scale >= 1, "integer scale must be at least 1");
         self.scale = scale;
@@ -467,8 +468,9 @@ impl GridRenderer {
         self.shift = shift.max(0);
     }
 
-    /// Swap in a rebuilt atlas: a font change, or a scalable face that really
-    /// does have to be re-rasterised. A DPR change is *not* one of these.
+    /// Swap in a rebuilt atlas: a font change, a size change, or a scalable
+    /// face following the display's density. A DPR change under a pixel face
+    /// is *not* one of these.
     pub fn set_atlas(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, atlas: GlyphAtlas) {
         self.atlas = atlas;
         self.rebind(device);
@@ -801,11 +803,7 @@ impl GridRenderer {
             // The link under the pointer is underlined the same way, and
             // after the marking, so a selected link keeps its swapped
             // colours: the line is drawn in whatever the glyph is drawn in.
-            // On a cell the program underlined already, the link's line goes
-            // in under the program's own, so the hover still shows.
-            let mut line_h = 1;
             if marked_at(self.link.as_ref(), row, col) {
-                line_h += i32::from(cell.underline);
                 cell.underline = true;
                 cell.line_color = cell.fg;
             }
@@ -845,7 +843,7 @@ impl GridRenderer {
                 let top = (baseline + 1).min(cell_h - 1);
                 Instance {
                     dst: [x, y + top],
-                    size: [cell_w, line_h.min(cell_h - top)],
+                    size: [cell_w, 1],
                     src: SOLID,
                     color: cell.line_color,
                 }
