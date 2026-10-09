@@ -3,8 +3,8 @@
 //!
 //! A low-resolution face is rasterised at its design size and *nowhere
 //! else*; its magnification is applied to geometry, never to the rasteriser.
-//! The counterexample stands: re-rasterising Terminess larger instead of
-//! scaling its geometry corrupted 3960 pixels while leaving Pet Me looking
+//! Re-rasterising Terminess larger instead of scaling its geometry
+//! corrupts 3960 pixels while leaving Pet Me looking
 //! fine. That magnification is one whole number covering the requested size
 //! and the display's density together, so a fractional density still lands
 //! every texel on whole device pixels.

@@ -7,10 +7,8 @@
 //!   holds cell-grid geometry at 1x; the magnification is a uniform. Scaling
 //!   therefore cannot perturb the layout, because the layout has already
 //!   happened, and under a pixel face a DPR change costs one uniform write
-//!   rather than a rebuild of the atlas. The counterexample makes the
-//!   property concrete:
-//!   re-rasterising Terminess at twice the size instead of scaling its
-//!   geometry moved 3960 pixels.
+//!   rather than a rebuild of the atlas. Re-rasterising Terminess at twice
+//!   the size instead of scaling its geometry moves 3960 pixels.
 //! * **The instance array is a fixed grid**, four blocks of `cols * rows` plus
 //!   a two-instance cursor tail and a row's worth of input-method composition
 //!   behind it. A damaged line is four contiguous ranges, so rio-vt's per-line
