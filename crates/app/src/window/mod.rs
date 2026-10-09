@@ -2207,6 +2207,10 @@ impl Surface for TerminalSurface {
             let physical = window.inner_size();
             self.window_size = (physical.width.max(1), physical.height.max(1));
         }
+        // The face is resolved at the new density before the grid is
+        // refitted, so the session sees one resize rather than two.
+        let cfg = self.live_config();
+        self.ensure_font(&cfg);
         self.relayout();
     }
 
