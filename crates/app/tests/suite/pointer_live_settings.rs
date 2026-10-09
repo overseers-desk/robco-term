@@ -188,13 +188,15 @@ fn a_config_edit_changes_the_pointer_mapping_without_restart() {
 
 /// The same click, on the same glass, at two device pixel ratios.
 ///
-/// `DistortionParams` is entirely physical: its `width`/`height` are the
-/// viewport's physical pixels, and the grid it measures against is sized
-/// from `Viewport::margin`, which `ensure_margin` scales by `scale_factor`
-/// at that boundary. A margin left logical anywhere along that path would
-/// measure the pointer against half the inset the glass was drawn with, and
-/// the cell the click reported would drift from the cell under the cursor,
-/// by more the further right you clicked.
+/// `DistortionParams` measures the pointer in physical pixels: its
+/// `width`/`height` are the viewport's physical pixels, and the grid it
+/// measures against is sized from `Viewport::margin`, which `ensure_margin`
+/// scales by `scale_factor` at that boundary. A margin left logical
+/// anywhere along that path would measure the pointer against half the
+/// inset the glass was drawn with, and the cell the click reported would
+/// drift from the cell under the cursor, by more the further right you
+/// clicked. The curvature's scale is the one logical term, and the parity
+/// test in `structure_subset.rs` holds it to the shader's.
 ///
 /// The margin here is deliberately large (`margin = 1.0`, about 40 logical
 /// pixels, more than four cells) so a half-sized inset cannot hide inside

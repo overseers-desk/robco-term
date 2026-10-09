@@ -57,35 +57,43 @@ fn structure_reads_only_structural_keys() {
     }
 }
 
-/// The frame's size is computed twice from the same settings, once on each
-/// side of a crate boundary neither can cross: `crt::params` bends the picture
-/// by it, `app::settings` un-bends a pointer position by it (through
-/// `term::distortion`). If they ever disagree, a click lands somewhere other
-/// than where the character under the cursor is drawn, and nothing about the
-/// picture looks wrong -- which is why this is a test and not a comment.
+/// The frame's size and the curvature are computed twice from the same
+/// settings, once on each side of a crate boundary neither can cross:
+/// `crt::params` bends the picture by them, `app::settings` un-bends a
+/// pointer position by them (through `term::distortion`). If they ever
+/// disagree, a click lands somewhere other than where the character under
+/// the cursor is drawn, and nothing about the picture looks wrong -- which
+/// is why this is a test and not a comment.
 ///
-/// The two sides have disagreed before: the render side had neither the
-/// `* 0.05` scale nor the chassis-or-screen split the formula requires, so
-/// it was drawing a moulding four and a half times too deep while the
-/// pointer inverted the right one.
+/// The two sides have disagreed before. The render side once had neither
+/// the `* 0.05` scale nor the chassis-or-screen split the formula requires,
+/// and drew a moulding four and a half times too deep while the pointer
+/// inverted the right one. Later the pointer normalised over the well's
+/// physical size while the shader normalised over its logical size, which
+/// agree only at a scale factor of 1, the scale a restated formula had been
+/// checked at. So the scale here is 5/3, and the pointer's side is the
+/// app's own derivation rather than a restatement of it.
 #[test]
-fn both_crates_derive_the_same_frame_size() {
+fn both_crates_bend_by_the_same_frame_and_curvature() {
     use config::Config;
     use crt::{DegaussState, Geometry, Params};
     use std::time::{Duration, Instant};
+    use term::{CellSize, Viewport};
 
+    // One well, as each side measures it: the pointer in physical pixels,
+    // the chain in logical ones. The size is the glass the disagreement
+    // first showed on, a 2880-wide panel at 5/3 less its bank; the virtual
+    // size and the font scaling feed no uniform checked here.
+    let scale = 5.0 / 3.0;
+    let viewport = Viewport::new(2462, 1800, scale, CellSize::new(9.0, 18.0));
     let geom = Geometry {
-        output_width: 1448.0,
-        output_height: 1086.0,
+        output_width: (2462.0 / scale) as f32,
+        output_height: (1800.0 / scale) as f32,
         virtual_width: 724.0,
         virtual_height: 543.0,
         total_font_scaling: 0.75,
-        device_pixel_ratio: 1.0,
+        device_pixel_ratio: scale as f32,
     };
-    let normalized = term::distortion::normalized_screen_scale(
-        f64::from(geom.output_width),
-        f64::from(geom.output_height),
-    );
 
     // Both the shipped default (a chassis stands) and the bare tube, since the
     // key the two sides read is not the same key in the two cases.
@@ -94,18 +102,30 @@ fn both_crates_derive_the_same_frame_size() {
         cfg.general.chassis_shown = chassis_shown;
         cfg.chassis.frame_size = 0.45;
         cfg.screen.frame_size = 0.1;
+        cfg.screen.screen_curvature = 0.2;
 
         let mut pacing = crt::Pacing::new(Instant::now());
         let time = pacing.tick_by(Duration::from_millis(16));
-        let uniform = Params::build(&cfg, &geom, time, DegaussState::IDLE)
-            .get("FrameSize")
-            .expect("the FrameSize uniform");
-        let pointer = app::settings::unscaled_frame_size(&cfg) * normalized;
+        let uniforms = Params::build(&cfg, &geom, time, DegaussState::IDLE);
+        let pointer = app::settings::distortion_params(Some(&cfg), &viewport);
 
-        assert!(
-            (f64::from(uniform) - pointer).abs() < 1e-6,
-            "with chassis_shown={chassis_shown} the shader bends by {uniform} \
-             and the pointer un-bends by {pointer}"
-        );
+        for (name, un_bent) in [
+            ("FrameSize", pointer.frame_size),
+            (
+                "ScreenCurvature",
+                pointer.screen_curvature
+                    * pointer.screen_curvature_size
+                    * pointer.normalized_screen_scale,
+            ),
+        ] {
+            let bent = uniforms
+                .get(name)
+                .unwrap_or_else(|| panic!("the {name} uniform"));
+            assert!(
+                (f64::from(bent) - un_bent).abs() < 1e-6,
+                "with chassis_shown={chassis_shown} the shader bends {name} by {bent} \
+                 and the pointer un-bends by {un_bent}"
+            );
+        }
     }
 }

@@ -33,6 +33,8 @@ use std::sync::Arc;
 use config::toml::ConfigError;
 use config::watch::ConfigWatcher;
 use config::Config;
+use term::distortion::{self, DistortionParams};
+use term::Viewport;
 
 /// The qualifier/organization/application triple handed to
 /// `directories::ProjectDirs`. No formal org exists for this project, so
@@ -269,6 +271,50 @@ pub fn distortion_margin(config: &Config) -> f64 {
 /// expecting another of them misdraws the moulding rather than failing.
 pub fn unscaled_frame_size(config: &Config) -> f64 {
     config.raw_frame_size() * 0.05
+}
+
+/// The transform a pointer position is pushed back through
+/// ([`term::distortion::correct_distortion`]) for a well of `viewport`'s
+/// size under `config`. No config is flat glass in a bare cabinet: zero
+/// frame inset and zero curvature, the map reduced to where the grid sits
+/// in the well.
+///
+/// Every length here is the well's physical pixels, the unit a pointer
+/// position arrives in, except the curvature's scale: `crt`'s `Geometry`
+/// normalises the shader's `ScreenCurvature` and `FrameSize` over the
+/// well's *logical* size, so the pointer scales by that size too, or the
+/// picture is bent by the scale factor more than a click is un-bent and a
+/// press near the glass's edge lands a row in from the character under it.
+///
+/// The margin is not a term here. It reaches the pointer the same way it
+/// reaches the picture, by shrinking `term_size` and so moving where the
+/// renderer centres the grid in the well (`term::distortion`).
+pub fn distortion_params(config: Option<&Config>, viewport: &Viewport) -> DistortionParams {
+    let (grid_width, grid_height) = viewport.term_size().pixel_size();
+    let width = f64::from(viewport.width);
+    let height = f64::from(viewport.height);
+    let scale = viewport.scale_factor.max(f64::EPSILON);
+    let normalized_screen_scale =
+        distortion::normalized_screen_scale(width / scale, height / scale);
+
+    let (frame_size, screen_curvature) = match config {
+        Some(config) => (
+            unscaled_frame_size(config) * normalized_screen_scale,
+            config.screen.screen_curvature,
+        ),
+        None => (0.0, 0.0),
+    };
+
+    DistortionParams {
+        width,
+        height,
+        frame_size,
+        screen_curvature,
+        screen_curvature_size: distortion::SCREEN_CURVATURE_SIZE,
+        normalized_screen_scale,
+        total_width: f64::from(grid_width),
+        total_height: f64::from(grid_height),
+    }
 }
 
 /// The live handle the event loop polls, and a SIGUSR1 handler

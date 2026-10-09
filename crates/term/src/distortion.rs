@@ -34,7 +34,7 @@ pub struct DistortionParams {
     /// Screen curvature size scaling factor.
     pub screen_curvature_size: f64,
     /// Scale factor normalizing curvature to the on-screen curved-glass
-    /// region.
+    /// region, measured in logical pixels ([`normalized_screen_scale`]).
     pub normalized_screen_scale: f64,
     /// The grid's own width in pixels, which the margin has already been
     /// taken out of (`Viewport::term_size`).
@@ -105,10 +105,12 @@ fn grid_origin(well: f64, grid: f64) -> f64 {
 pub const SCREEN_CURVATURE_SIZE: f64 = 0.6;
 
 /// Normalizes curvature strength to the on-screen box the curved glass
-/// fills -- the same pixel rectangle a pointer position arrives in, so
-/// callers pass the window/pointer-input-area width and height here. A
-/// window manager free to grant no size at all is why the denominator is
-/// floored at 1.
+/// fills, measured in *logical* pixels: the unit the render chain's
+/// geometry normalizes the shader's curvature and frame uniforms in, so a
+/// caller passes the well's physical size divided by the scale factor,
+/// while the pointer position itself and [`DistortionParams::width`] and
+/// `height` stay physical. A window manager free to grant no size at all
+/// is why the denominator is floored at 1.
 pub fn normalized_screen_scale(width: f64, height: f64) -> f64 {
     1024.0 / (0.5 * width + 0.5 * height).max(1.0)
 }
