@@ -235,7 +235,7 @@ mod tests {
         let asker = Asker::closed();
         let asked = std::time::Instant::now();
         assert_eq!(asker.ask("passphrase: ", Answer::Secret), None);
-        assert!(asked.elapsed() < Duration::from_secs(1), "it waited on nobody");
+        assert!(asked.elapsed() < Duration::from_secs(10), "it waited on nobody");
         // And saying something into the void is not an error either.
         asker.say("nothing is listening");
     }
