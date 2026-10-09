@@ -263,7 +263,7 @@ request to the one already running, which opens another window and exits.
 
 ## Status
 
-Version 0.1.0, on the [releases page](https://github.com/overseers-desk/RobCo-Terminal/releases).
+The current release is on the [releases page](https://github.com/overseers-desk/robco-term/releases).
 Channels and tmux control mode work against live
 tmux; the core passes the conformance suite bar the 8-bit cases xterm fails.
 
