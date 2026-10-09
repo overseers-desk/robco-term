@@ -192,7 +192,7 @@ fn a_prose_column_comes_back_from_the_pixel_it_is_drawn_at() {
     let Some(entry) = dejavu() else { return };
     const PROSE: &str = "DejaVu Serif";
 
-    let resolved = sizing::resolve(entry, &SizingRequest::default(), ScalePolicy::Floor);
+    let resolved = sizing::resolve(entry, &SizingRequest::default());
     let mut font = FontContext::with_prose(entry, Some(PROSE));
     if font.prose_family().is_none() {
         eprintln!("skipping: {PROSE} is not installed, so there is no prose face to walk");
