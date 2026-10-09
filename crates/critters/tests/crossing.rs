@@ -17,6 +17,16 @@ use std::time::{Duration, Instant};
 
 use critters::{Critters, Crossing, ART};
 
+/// Seconds past the epoch. Intervals are counted from local midnight and
+/// every timezone offset is a whole number of minutes, so these divide into
+/// intervals the same way the schedule's clock does.
+fn epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 /// Tick real seconds' worth of frames and count how many times a critter came.
 fn watch(critters: &mut Critters, seconds: f64) -> u32 {
     let (start, mut seen, mut standing) = (Instant::now(), 0, false);
@@ -142,11 +152,15 @@ fn wider_than_the_glass_still_crosses() {
 #[test]
 fn an_interval_brings_a_critter_and_only_one() {
     let mut critters = Critters::new(3, true, Duration::from_secs(1), false, [true; ART.len()]);
-    // Three seconds is three intervals, and no interval brings two.
-    let seen = watch(&mut critters, 3.2);
+    // No interval brings two. The intervals are counted off the clock rather
+    // than assumed from the watch's length: a stalled machine runs the watch
+    // long, and the bound moves with it.
+    let from = epoch();
+    let seen = u64::from(watch(&mut critters, 3.2));
+    let intervals = epoch() - from + 1;
     assert!(
-        (1..=4).contains(&seen),
-        "{seen} critters in three intervals"
+        (1..=intervals).contains(&seen),
+        "{seen} critters in {intervals} intervals"
     );
 }
 
@@ -158,25 +172,26 @@ fn an_interval_brings_a_critter_and_only_one() {
 /// interval, watched from its start, does.
 #[test]
 fn an_interval_joined_late_brings_nothing() {
-    // Wait for the middle of a four-second interval before joining. Intervals
-    // are counted from local midnight and every timezone offset is a whole
-    // number of minutes, so seconds past the epoch divide the same way.
-    let epoch = || {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    };
+    // Wait for the middle of a four-second interval before joining, then
+    // watch only while that interval lasts. The clock is read after each
+    // tick: a tick that landed in the next interval, after a stall, is one
+    // of an interval watched from its start, and that one is owed a critter.
     while epoch() % 4 != 2 {
         std::thread::sleep(Duration::from_millis(50));
     }
+    let interval = epoch() / 4;
     let mut critters = Critters::new(5, true, Duration::from_secs(4), false, [true; ART.len()]);
-    critters.tick(Instant::now(), 80, 24);
-    assert_eq!(
-        watch(&mut critters, 1.2),
-        0,
-        "an interval joined late brought a critter"
-    );
+    loop {
+        critters.tick(Instant::now(), 80, 24);
+        if epoch() / 4 != interval {
+            break;
+        }
+        assert!(
+            critters.crossing().is_none(),
+            "an interval joined late brought a critter"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 #[test]
