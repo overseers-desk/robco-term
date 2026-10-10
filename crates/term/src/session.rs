@@ -83,14 +83,12 @@ pub type Replies = Arc<Mutex<Vec<u8>>>;
 /// because the drain is a single reader on the same thread as the parse, and
 /// bytes are what the far end wants -- concatenating them is the whole job.
 ///
-/// Only `PtyWrite` is caught, and the omissions are decisions rather than a
-/// to-do list. OSC 52's clipboard *load* -- a remote asking to read what the
-/// local user has copied -- stays unanswered: reading the clipboard out is
-/// disabled by default across the terminal field, and this terminal does not
-/// reopen it. The other closure-carrying events (`ClipboardLoad`,
-/// `ColorRequest`, `TextAreaSizeRequest`) are unhandled because nothing here
+/// Only `PtyWrite` is caught. The closure-carrying events (`ClipboardLoad`,
+/// `ColorRequest`, `TextAreaSizeRequest`) go unanswered, because nothing here
 /// yet knows what to answer them with; the esctest harness answers the size
 /// one for itself, being the only place that knows a cell's pixels.
+/// `ClipboardLoad` is OSC 52 asking to read what the local user has copied,
+/// which most terminals leave off by default.
 #[derive(Clone, Default)]
 pub struct ReplyListener {
     /// `None` on a grid whose answers have nowhere to go. See

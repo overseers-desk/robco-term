@@ -14,7 +14,8 @@
 //! The chain's input is `gpu::Target`'s texture, which carries
 //! `TEXTURE_BINDING` for exactly this. Its output is the finished glass image
 //! and nothing else: chassis chrome composites over this result rather than
-//! through it, which is the whole reason the Rio fork was rejected.
+//! through it. `docs/arch.md` explains why that makes the renderer this
+//! chain rather than a fork of Rio.
 //!
 //! One pass in the chain has state outside its own uniforms, and [`Chain`]
 //! carries the host half of it: the burn-in accumulator at pass 0.

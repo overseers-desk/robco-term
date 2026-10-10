@@ -145,8 +145,8 @@ mod row {
 /// everything on top of it is painting.
 ///
 /// **The lever's throw is not here.** The swing is a rotating item with a
-/// throw animation and an easing overshoot; the swing itself is a
-/// mechanism, not a moulding, and stays out. What this draws is the lever
+/// throw animation and an easing overshoot, and nothing animates it. What
+/// this draws is the lever
 /// at rest (`current: false`'s pose, which is what a still snap shows):
 /// plate, rivets, numeral, well, the lit floor the thrown lever would
 /// uncover, the pivot socket, the bevel line, the spill, and now the cap

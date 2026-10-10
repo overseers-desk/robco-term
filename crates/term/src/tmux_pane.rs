@@ -4,11 +4,10 @@
 //! its resize all assume a child on a master fd. A tmux pane has none of
 //! that: its bytes arrive as `%output` payloads peeled off the gateway's
 //! control stream, and its keystrokes leave as `send-keys` commands on that
-//! same stream. Bending `app::channels` around that difference was a design
-//! that was ruled out; the variant lives here instead, beside the
-//! PTY session, and [`ChannelSession`] is the one type a channel slot holds.
+//! same stream. The variant lives here, beside the PTY session, and
+//! [`ChannelSession`] is the one type a channel slot holds.
 //!
-//! What a [`TmuxPane`] deliberately does not have:
+//! What a [`TmuxPane`] does not have:
 //!
 //! * **A DCS tap.** The envelope lives on the gateway's own PTY; a pane's
 //!   payload is already inside it. A `tmux -CC` run *inside a tmux pane*

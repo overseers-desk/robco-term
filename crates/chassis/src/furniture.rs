@@ -27,12 +27,11 @@
 //! keeps the composition order fixed across the join, and it is the reason
 //! the two kinds are one list rather than two.
 //!
-//! The one piece deliberately left out of the switchboard's row is the
-//! lever's throw: the swing from rest to thrown, with its own easing
-//! overshoot. The cap itself is painted: drop shadow, front face, chamfer
-//! and lit top sliver over the well's left, alongside the riveted plate,
-//! stamped numeral, well, glow and bevel. It is named here rather than left
-//! to be discovered, because a swing is a mechanism, not a moulding.
+//! The switchboard's lever is painted at rest; its throw, the swing from
+//! rest to thrown with its easing overshoot, is not animated. The cap itself
+//! is painted: drop shadow, front face, chamfer and lit top sliver over the
+//! well's left, alongside the riveted plate, stamped numeral, well, glow and
+//! bevel.
 //!
 //! # The channel seam
 //!
@@ -520,8 +519,7 @@ pub fn bank_pieces(
 /// Three derived colours go in, not the profile's stored hex: the frame
 /// colour through the shared hex parser, and the *mixed* font and background
 /// colours that [`font_color`] and [`background_color`] compute.
-/// `crt::params` builds the same value for the frame pass; the duplicate is
-/// [`crate::color`]'s standing decision.
+/// `crt::params` builds the same value for the frame pass.
 pub fn plastic(cfg: &Config) -> Rgba {
     let frame = if cfg.general.chassis_shown {
         &cfg.chassis.frame_color

@@ -117,9 +117,6 @@ pub fn str_to_color(s: &str) -> Rgba {
 /// `get` rather than direct slicing for the last inch: an index landing
 /// inside a multi-byte character is not a range a well-formed hex string can
 /// produce, but it is one a config file can.
-///
-/// `crt-render`'s copy carries the same fix, because the chassis stays off
-/// that crate by decision (b) (see the module doc).
 fn substring(s: &str, from: usize, to: usize) -> &str {
     let to = to.min(s.len());
     let from = from.min(to);
@@ -158,9 +155,8 @@ pub fn sum(a: Rgba, b: Rgba) -> Rgba {
 ///
 /// The bank's plastic is bound to exactly this call, and every piece of
 /// painted furniture takes its shade from that one property, so this is the
-/// root of the whole column's colour. `crt::color` holds the same function
-/// for the glass chain's uniforms; the duplicate is this module's standing
-/// decision, not an oversight (see the module doc).
+/// root of the whole column's colour. The glass chain's frame uniform comes
+/// from the same function, through `crt::color`.
 pub fn frame_base_color(
     frame_color: Rgba,
     font_color: Rgba,

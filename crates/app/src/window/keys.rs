@@ -163,11 +163,10 @@ impl TerminalSurface {
             KeyAction::ScrollLineDown => self.scroll.scroll(term, -1),
             KeyAction::ScrollPageUp => self.scroll.page_up(term),
             KeyAction::ScrollPageDown => self.scroll.page_down(term),
-            // Not a movement, and deliberately not a hold either. Konsole
-            // holds output on Scroll Lock; the choice here was between
-            // porting that hold and leaving the binding inert, and it
-            // settled on inert: the keytab names the action, and the action
-            // does nothing. The keytab row stays, because the keytab is
+            // Not a movement, and not a hold either. Konsole holds output
+            // on Scroll Lock; that hold is not ported, so the keytab names
+            // the action and the action does nothing. The keytab row stays,
+            // because the keytab is
             // transcribed as written and the key really is bound to an
             // action that really does nothing.
             //
