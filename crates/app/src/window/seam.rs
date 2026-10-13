@@ -7,6 +7,8 @@
 //!
 //! Fields touched: `cabinet`, which owns the geometry and the hit tests and
 //! takes a drag on the spot; `seam_press`, the press the seam is holding;
+//! `strip_held` and `strip_target`, a window of the bank being carried and
+//! where it would drop;
 //! `pending_led_characters`, what a drag has landed and the settings file
 //! does not carry yet; `seam_cursor`, whether the seam claims the pointer's shape; and
 //! `shell_events`, because the bank's width is the window's minimum-width
@@ -55,17 +57,60 @@ impl TerminalSurface {
         if button != MouseButton::Left {
             return false;
         }
-        let scale = self.viewport.scale_factor.max(f64::EPSILON);
-        let (x, y) = (position.x / scale, position.y / scale);
-        let strips = self.bank_strips();
-        let Some(row) = self
-            .cabinet
-            .as_ref()
-            .and_then(|cabinet| cabinet.strip_at(strips.rows.len(), x, y))
-        else {
+        let Some(row) = self.strip_under(position) else {
             return false;
         };
-        self.press_strip(strips.rows[row].channel);
+        // A dark slot's press starts a session and carries nothing.
+        self.strip_held = row.open;
+        self.press_strip(row.channel);
+        true
+    }
+
+    /// The bank's row whose drawn window is under `position`.
+    fn strip_under(&self, position: PhysicalPosition<f64>) -> Option<chassis::StripRow> {
+        let scale = self.viewport.scale_factor.max(f64::EPSILON);
+        let (x, y) = (position.x / scale, position.y / scale);
+        let mut strips = self.bank_strips();
+        let row = self
+            .cabinet
+            .as_ref()
+            .and_then(|cabinet| cabinet.strip_at(strips.rows.len(), x, y))?;
+        Some(strips.rows.swap_remove(row))
+    }
+
+    /// A motion while a window is held is the drag's: the slot under the
+    /// pointer becomes the target where the store would land there. Answers
+    /// whether a window was held.
+    pub(super) fn strip_dragged(&mut self, position: PhysicalPosition<f64>) -> bool {
+        if !self.strip_held {
+            return false;
+        }
+        let bank = self.pager.view(&self.channels).bank;
+        let target = self
+            .strip_under(position)
+            .map(|row| row.channel)
+            .filter(|&channel| self.channels.can_store(bank, channel));
+        if target != self.strip_target {
+            self.strip_target = target;
+            if let Some(window) = self.window.as_ref() {
+                window.request_redraw();
+            }
+        }
+        true
+    }
+
+    /// The held window comes up: over a target the channel is stored there,
+    /// as the store chord stores it, and anywhere else the bank stands as it
+    /// was. Answers whether a window was held.
+    pub(super) fn strip_released(&mut self) -> bool {
+        if !std::mem::take(&mut self.strip_held) {
+            return false;
+        }
+        if let Some(target) = self.strip_target.take() {
+            let bank = self.pager.view(&self.channels).bank;
+            self.channels.move_current_to(bank, target);
+            self.channel_changed();
+        }
         true
     }
 

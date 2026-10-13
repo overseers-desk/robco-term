@@ -419,6 +419,9 @@ impl TerminalSurface {
             self.seam_released();
             return;
         }
+        if button == MouseButton::Left && self.strip_released() {
+            return;
+        }
         // A release on the cabinet is the cabinet's, as the press was: it
         // ends no mark and reaches no program. A drag that began on the
         // glass is the exception, and ends at the edge it ran off.
@@ -462,6 +465,10 @@ impl TerminalSurface {
         position: PhysicalPosition<f64>,
         modifiers: ModifiersState,
     ) {
+        // A window of the bank held down takes every motion until it comes up.
+        if self.strip_dragged(position) {
+            return;
+        }
         // Every motion goes to the seam, drag or no drag: it tracks the pointer
         // for the cursor's shape and moves nothing until it is held.
         if self.seam_moved(position) {
@@ -610,6 +617,9 @@ impl TerminalSurface {
             }
             self.dragging = false;
             self.seam_released();
+            // A window of the bank carried off the same way drops nowhere.
+            self.strip_held = false;
+            self.strip_target = None;
             // And the press that was a secondary click is over with it: a
             // flag left standing would turn the next window's first ordinary
             // press into a right release.

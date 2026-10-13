@@ -462,6 +462,75 @@ fn a_press_on_a_strip_opens_a_dark_slot_and_selects_an_open_one() {
     assert_eq!(wait_for_prompt(&mut surface), first);
 }
 
+/// The middle of the page's `row`th window, counted from 0, on the surface's
+/// own cabinet, in physical pixels at the harness's scale of 1.
+fn strip_key(surface: &TerminalSurface, row: usize) -> PhysicalPosition<f64> {
+    let cabinet = surface.cabinet().expect("the harness gave it a cabinet");
+    let shell = chassis::shell_metrics(&Config::default());
+    let strip = chassis::furniture::strip_rect(cabinet.geometry(), &shell, row);
+    PhysicalPosition::new(strip.x + strip.width / 2.0, strip.y + strip.height / 2.0)
+}
+
+fn drag(surface: &mut TerminalSurface, to: PhysicalPosition<f64>) {
+    app::shell::Surface::cursor_moved(surface, to, ModifiersState::empty());
+}
+
+fn release(surface: &mut TerminalSurface, at: PhysicalPosition<f64>) {
+    app::shell::Surface::mouse_released(surface, MouseButton::Left, at, ModifiersState::empty());
+}
+
+/// A window dragged onto a dark one shows the drop before it is made, and
+/// the drop stores the channel there as `Alt+Shift+digit` would.
+#[test]
+fn a_window_dragged_onto_a_dark_one_moves_its_channel_there() {
+    let mut surface = surface();
+    let first = wait_for_prompt(&mut surface);
+    let (one, five) = (strip_key(&surface, 0), strip_key(&surface, 4));
+
+    press(&mut surface, one);
+    drag(&mut surface, five);
+    let strips = surface.bank_strips();
+    assert!(strips.rows[4].ghost && strips.rows[4].open, "the drop is shown");
+    assert!(!strips.rows[0].open, "and the window it leaves dark");
+    assert_eq!(surface.channels().current_channel(), 1, "but not made");
+
+    release(&mut surface, five);
+    assert_eq!(surface.channels().current_channel(), 5);
+    assert_eq!(surface.channels().slot_title(0, 1), None);
+    assert!(surface.bank_strips().rows.iter().all(|row| !row.ghost));
+    assert_eq!(wait_for_prompt(&mut surface), first);
+}
+
+/// A drop onto an open window swaps the two, and one let go of off the bank
+/// leaves it as it stands.
+#[test]
+fn a_window_dropped_on_another_swaps_and_one_dropped_elsewhere_does_not() {
+    let mut surface = surface();
+    let first = wait_for_prompt(&mut surface);
+    character(&mut surface, "t", CTRL_SHIFT);
+    let second = wait_for_prompt(&mut surface);
+
+    let (one, two) = (strip_key(&surface, 0), strip_key(&surface, 1));
+    let glass = PhysicalPosition::new(f64::from(WINDOW_W) - 40.0, 100.0);
+    press(&mut surface, two);
+    drag(&mut surface, one);
+    let strips = surface.bank_strips();
+    assert!(strips.rows[0].ghost && strips.rows[1].ghost, "a swap changes both");
+    drag(&mut surface, glass);
+    assert!(surface.bank_strips().rows.iter().all(|row| !row.ghost));
+    release(&mut surface, glass);
+    assert_eq!(surface.channels().current_channel(), 2);
+
+    press(&mut surface, two);
+    drag(&mut surface, one);
+    release(&mut surface, one);
+    assert_eq!(surface.channels().current_channel(), 1);
+    assert_eq!(wait_for_prompt(&mut surface), second);
+    named(&mut surface, NamedKey::PageDown, CTRL);
+    assert_eq!(surface.channels().current_channel(), 2);
+    assert_eq!(wait_for_prompt(&mut surface), first, "the displaced session");
+}
+
 /// Stepping the pager over another of the current bank's own screenfuls views
 /// a page without stealing the air, and the numerals restart at 1 on the new
 /// page. Crossing into *another* bank's stretch is a band switch and does move

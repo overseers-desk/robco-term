@@ -311,6 +311,29 @@ impl TerminalSurface {
             Some(handle) => handle.with(chassis::channel_indicator),
             None => chassis::channel_indicator(&self.base),
         };
-        self.pager.strips(&self.channels, indicator)
+        let mut strips = self.pager.strips(&self.channels, indicator);
+        if let Some(target) = self.strip_target {
+            self.ghost_drop(&mut strips, target);
+        }
+        strips
+    }
+
+    /// The two windows a drop onto `target` would change, drawn as it would
+    /// leave them: the carried title on the target, and on the slot it came
+    /// from the title it swaps with, or nothing.
+    fn ghost_drop(&self, strips: &mut chassis::BankStrips, target: u32) {
+        let (bank, origin) = self.channels.on_air();
+        for row in &mut strips.rows {
+            let from = match row.channel {
+                c if c == target => origin,
+                c if c == origin => target,
+                _ => continue,
+            };
+            let title = self.channels.slot_title(bank, from);
+            row.title = title.unwrap_or_default().to_string();
+            row.open = title.is_some();
+            row.ghost = title.is_some();
+            row.bright = false;
+        }
     }
 }
