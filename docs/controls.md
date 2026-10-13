@@ -49,6 +49,12 @@ starts the next one.
 neighbour, and take an empty slot outright. The first slot and the last are
 walls: a step past either leaves the bank as it stands.
 
+A channel's window dragged onto another window of the same bank page is
+stored there, as `Alt`+`Shift`+digit stores it: an empty slot takes it and
+an occupied one swaps the two. While the button is down, the windows the
+drop would change show its outcome, dimmer than any channel in the bank.
+Let go anywhere else and the bank stands as it was.
+
 ## Windows
 
 | Key | What it does |
