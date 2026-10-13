@@ -741,13 +741,10 @@ impl<S> Channels<S> {
         true
     }
 
-    /// `:433-480`. The session on screen keeps its screen; its slot number
-    /// moves. An occupied slot swaps the two sessions' numbers.
-    ///
-    /// The LED blink is the store's acknowledgement, so the tube holds steady
-    /// throughout: the degauss is disarmed for the move and re-armed after
-    /// it.
-    pub fn move_current_to(&mut self, bank: BankId, channel: u32) -> bool {
+    /// Whether [`Channels::move_current_to`] would take the session on screen
+    /// to `channel` of `bank`. A drag asks it before the drop, to show only
+    /// a store that will land.
+    pub fn can_store(&self, bank: BankId, channel: u32) -> bool {
         // The pager can be viewing one bank while another holds the air, and a
         // store chord lands on the bank on view: there is no slot on it the
         // session could take without leaving its own bank. Nothing happens,
@@ -758,20 +755,32 @@ impl<S> Channels<S> {
         if !(1..=CHANNEL_CAP).contains(&channel) || channel == self.current_channel() {
             return false;
         }
+        let Some(from) = self.row_of(bank, self.current_channel()) else {
+            return false;
+        };
+        if self.is_gateway(&self.rows[from]) || self.slot_held(bank, channel) {
+            return false;
+        }
+        !self
+            .row_of(bank, channel)
+            .is_some_and(|i| self.is_gateway(&self.rows[i]))
+    }
+
+    /// `:433-480`. The session on screen keeps its screen; its slot number
+    /// moves. An occupied slot swaps the two sessions' numbers.
+    ///
+    /// The LED blink is the store's acknowledgement, so the tube holds steady
+    /// throughout: the degauss is disarmed for the move and re-armed after
+    /// it.
+    pub fn move_current_to(&mut self, bank: BankId, channel: u32) -> bool {
+        if !self.can_store(bank, channel) {
+            return false;
+        }
         let origin = self.current_channel();
         let Some(from) = self.row_of(bank, origin) else {
             return false;
         };
-        if self.is_gateway(&self.rows[from]) {
-            return false;
-        }
-        if self.slot_held(bank, channel) {
-            return false;
-        }
         let to = self.row_of(bank, channel);
-        if to.is_some_and(|i| self.is_gateway(&self.rows[i])) {
-            return false;
-        }
 
         let armed = self.degauss_armed;
         self.degauss_armed = false;
