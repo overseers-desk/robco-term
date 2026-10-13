@@ -65,6 +65,16 @@ pub fn window_colors(font_color: Rgba, powered: bool, bright: bool) -> Colors {
     }
 }
 
+/// A ghost's window: the title lit below an open window off the air, on an
+/// unpowered panel. It throws no spill, being no channel yet.
+pub fn ghost_colors(font_color: Rgba) -> Colors {
+    let off = window_colors(font_color, false, true);
+    Colors {
+        lit: scale_color(off.lit, 0.30),
+        ..off
+    }
+}
+
 /// The window's spill-glow strength.
 pub fn spill_strength(powered: bool, bright: bool) -> f32 {
     if !powered {
@@ -160,6 +170,15 @@ mod tests {
         // bright is meaningless once unpowered, but the formula still runs:
         // lit == full*0.45 either way since `bright` is false in both calls.
         assert_eq!(off.lit, on_dark.lit);
+    }
+
+    #[test]
+    fn a_ghost_reads_between_an_unlit_lamp_and_an_open_window() {
+        let amber = crate::color::str_to_color("#ff8100");
+        let ghost = ghost_colors(amber);
+        assert!(ghost.lit.r > window_colors(amber, true, false).dim.r);
+        assert!(ghost.lit.r < window_colors(amber, true, false).lit.r);
+        assert_eq!(ghost.panel, window_colors(amber, false, false).panel);
     }
 
     #[test]

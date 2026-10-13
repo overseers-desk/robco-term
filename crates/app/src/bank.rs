@@ -184,6 +184,7 @@ impl BankPager {
                     // The brightness rule has one home: `chassis::strip`.
                     bright: chassis::strip::bright(current, indicator),
                     current,
+                    ghost: false,
                 }
             })
             .collect();

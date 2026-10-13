@@ -603,14 +603,18 @@ fn led_piece(
         strip.height + 2.0 * spill_y,
     );
 
-    let colors = led::window_colors(font_color(cfg), row.open, bright);
+    let colors = if row.ghost {
+        led::ghost_colors(font_color(cfg))
+    } else {
+        led::window_colors(font_color(cfg), row.open, bright)
+    };
     Some(Piece::shaded(
         grown,
         PieceParams::Led(led_params(
             grid,
             colors,
             led::glow(bright),
-            led::spill_strength(row.open, bright),
+            led::spill_strength(row.open && !row.ghost, bright),
             (spill_x, spill_y),
             (grown.width, grown.height),
         )),
@@ -660,9 +664,15 @@ fn tape_piece(
         height: r.height,
         rgba: raster::to_rgba8(&r).into(),
     });
+    let mut params = tape_params((label_w, label_h), glyph_rect);
+    if row.ghost {
+        // The tape has no current to lower: a ghost's letters fade into it.
+        let faded = crate::color::mix(tape::tape_color(), tape::letter_color(), 0.35);
+        params.letter_color = [faded.r, faded.g, faded.b, faded.a];
+    }
     Some(Piece::shaded(
         rect,
-        PieceParams::Tape(tape_params((label_w, label_h), glyph_rect)),
+        PieceParams::Tape(params),
         // A blank tape has no glyph raster at all; the pass samples nothing
         // inside a zero-area glyph box, so a 1x1 dark texel is enough to bind.
         Some(source.unwrap_or(Raster {

@@ -53,6 +53,9 @@ pub struct StripRow {
     /// *every* row under the other two, where the mark is the selector's
     /// or the toggle's to carry rather than the lamp's.
     pub bright: bool,
+    /// What a drag would leave here, shown before the drop: the window
+    /// reads dimmer than any channel standing in the bank.
+    pub ghost: bool,
 }
 
 impl StripRow {
@@ -104,6 +107,7 @@ impl BankStrips {
                         open: i == 0,
                         current: i == 0,
                         bright: bright(i == 0, ChannelIndicator::Glow),
+                        ghost: false,
                     }
                 })
                 .collect(),
@@ -225,6 +229,7 @@ mod tests {
                     open: false,
                     current: false,
                     bright: false,
+                    ghost: false,
                 })
                 .collect(),
             page_index: 1,
