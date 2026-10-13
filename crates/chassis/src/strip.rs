@@ -54,7 +54,7 @@ pub struct StripRow {
     /// or the toggle's to carry rather than the lamp's.
     pub bright: bool,
     /// What a drag would leave here, shown before the drop: the window
-    /// reads dimmer than any channel standing in the bank.
+    /// reads dimmer than any open channel's.
     pub ghost: bool,
 }
 

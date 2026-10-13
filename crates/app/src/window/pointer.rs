@@ -617,7 +617,7 @@ impl TerminalSurface {
             }
             self.dragging = false;
             self.seam_released();
-            // A window of the bank carried off the same way drops nowhere.
+            // A bank strip held down as focus goes drops nowhere.
             self.strip_held = false;
             self.strip_target = None;
             // And the press that was a secondary click is over with it: a

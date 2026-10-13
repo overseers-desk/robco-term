@@ -747,8 +747,7 @@ impl<S> Channels<S> {
     pub fn can_store(&self, bank: BankId, channel: u32) -> bool {
         // The pager can be viewing one bank while another holds the air, and a
         // store chord lands on the bank on view: there is no slot on it the
-        // session could take without leaving its own bank. Nothing happens,
-        // which is the whole of the answer.
+        // session could take without leaving its own bank.
         if bank != self.current_bank {
             return false;
         }

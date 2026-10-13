@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn a_ghost_reads_between_an_unlit_lamp_and_an_open_window() {
+    fn a_ghost_title_is_dimmer_than_an_open_windows_and_brighter_than_its_unlit_lamps() {
         let amber = crate::color::str_to_color("#ff8100");
         let ghost = ghost_colors(amber);
         assert!(ghost.lit.r > window_colors(amber, true, false).dim.r);

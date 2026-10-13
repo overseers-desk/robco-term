@@ -666,7 +666,7 @@ fn tape_piece(
     });
     let mut params = tape_params((label_w, label_h), glyph_rect);
     if row.ghost {
-        // The tape has no current to lower: a ghost's letters fade into it.
+        // Tape is not lit, so a ghost's letters fade into the tape instead.
         let faded = crate::color::mix(tape::tape_color(), tape::letter_color(), 0.35);
         params.letter_color = [faded.r, faded.g, faded.b, faded.a];
     }

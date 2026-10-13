@@ -496,11 +496,9 @@ pub struct TerminalSurface {
     /// The seam took the press that is still down, so the release and the
     /// motions between belong to it and not to the grid.
     seam_press: bool,
-    /// A press on an open window of the bank is still down, carrying the
-    /// channel it brought to the screen.
+    /// A press on an open bank strip is still down, carrying its channel.
     strip_held: bool,
-    /// Where a drop would store that channel, set only where the store would
-    /// land; the bank draws the drop's outcome there as ghosts.
+    /// The slot a drop would store the held channel on, where it would land.
     strip_target: Option<u32>,
     /// What the drag has landed and the settings do not carry yet. The write
     /// happens once, when the button comes up: the cabinet is already at the
