@@ -12,8 +12,29 @@ robco-term (0.3.1) unstable; urgency=medium
     screen.prose_scaling and screen.monospace_trigger are gone from the
     terminal, and a config file still carrying the two keys is read with
     them ignored. The face continues on the proportional branch.
+  * The type size is one number: general.font_size, in pixels at the
+    display's own scale, 24 by default, set on the Screen tab under
+    Font. A pixel face draws the whole multiple of its native size
+    nearest to it; a scalable face draws it exactly. general.font_scaling
+    is gone, and a config file still carrying it is read with it
+    ignored. general.window_scaling sizes the cabinet, not the type.
+  * Moving the window to a display of another density draws the type at
+    the new density and resizes the session once.
+  * A hovered link's underline is one pixel deep, the same on text the
+    program underlined as on plain text.
+  * A click on the curved glass lands on the cell drawn under the
+    pointer at every display scale.
+  * A channel's window dragged onto another window of the same bank page
+    is stored there, as Alt+Shift+digit stores it: an empty slot takes
+    it and an occupied one swaps the two. While the button is down, the
+    windows the drop would change show its outcome, dimmed.
+  * With tmux -CC attached beside another client of the same session,
+    every window is sized to this terminal, and each channel draws its
+    pane at the size tmux gave it. A window shared with a larger client
+    used to grow past the screen and draw its program laid out for that
+    client.
 
- -- Weiwu Zhang <a@colourful.land>  Thu, 08 Oct 2026 22:35:41 +1000
+ -- Weiwu Zhang <a@colourful.land>  Sun, 18 Oct 2026 00:47:21 +1000
 
 robco-term (0.3.0) unstable; urgency=medium
 
