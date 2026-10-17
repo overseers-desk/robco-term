@@ -1,6 +1,6 @@
 [package]
 name = "robco-core"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 # rio-vt publishes no `rust-version`; the Rio workspace it is cut from pins
 # 1.96.1, so that is the floor the whole rebuild holds itself to.

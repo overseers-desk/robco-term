@@ -1,6 +1,6 @@
 [package]
 name = "robco-config"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "RobCo Terminal settings: the schema with built-in defaults, atomic TOML I/O, and live file watching."
 license = "MIT"

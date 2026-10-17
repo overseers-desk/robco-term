@@ -1,6 +1,6 @@
 [package]
 name = "robco-gpu"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96.1"
 description = "RobCo Terminal wgpu device concerns: the feature set every device the CRT chain runs on is created with, the offscreen colour target the grid is drawn into and read back from, and, behind the `harness` feature, the machine-wide device lock the GPU-backed tests hold."

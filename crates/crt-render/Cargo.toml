@@ -1,6 +1,6 @@
 [package]
 name = "robco-crt-render"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96.1"
 description = "RobCo Terminal CRT pass graph: the one librashader preset the screen is drawn through, covering terminal static/dynamic, frame, bloom, procedural metals, LED matrix, and tape label, plus shared colour helpers, the wall-clock pacing that feeds the time uniforms, the burn-in feedback slot, and the degauss transient hook."

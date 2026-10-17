@@ -1,6 +1,6 @@
 [package]
 name = "robco-critters"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96.1"
 description = "The critters: eight pieces of drawn ASCII art, a memoryless clock that sends one across the glass every quarter hour or so, and the cells it asks to have painted. No renderer, no terminal, no clock of its own."

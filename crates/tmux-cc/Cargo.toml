@@ -1,6 +1,6 @@
 [package]
 name = "robco-tmux-cc"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96.1"
 description = "The tmux control-mode (tmux -CC) protocol codec: typed commands to the wire, wire bytes to typed events. Protocol only -- no session model, no PTY, no rendering."

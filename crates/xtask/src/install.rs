@@ -644,8 +644,7 @@ pub fn stage_deb(args: StageDebArgs) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// The version is readable, and it is the workspace's rather than
-    /// xtask's own: the mistake `CARGO_PKG_VERSION` would have made.
+    /// The version is readable, and it is the workspace manifest's.
     #[test]
     fn version_comes_from_the_workspace_manifest() {
         let version = version().expect("workspace version");

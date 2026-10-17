@@ -1,6 +1,6 @@
 [package]
 name = "robco-chassis"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 rust-version = "1.96.1"
 description = "RobCo Terminal chassis chrome: the cabinet the curved screen is set into. The bank frame's geometry contract, the seam drag that resizes the screen region, the three shells' fixed measures and drawing recipes, the LED and tape channel displays, and the procedural metal shaders the casting is poured from. Per R0(a) this chrome sits outside the CRT chain and composites over its output rather than running through it."
