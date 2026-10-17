@@ -39,12 +39,12 @@
 //! of it is looked up at run time, and the binary does not care where it sits
 //! or whether a source checkout exists:
 //!
-//! - the 24 bundled font faces (`include_bytes!` in `robco-term`'s
+//! - the 24 bundled font faces (`include_bytes!` in `robco-core`'s
 //!   `fonts::bundled`),
 //! - every shader source: the CRT chain's passes (`robco-crt-render`'s
 //!   `preset`), the burn-in pass (`crt::burn_in`), the chassis metal, LED
 //!   matrix and tape-label passes (`robco-chassis`'s `shaders`), and the
-//!   grid's WGSL (`robco-term`'s `render`),
+//!   grid's WGSL (`robco-core`'s `render`),
 //! - the CRT chain's noise texture (`allNoise512.png`),
 //! - the 14 screen and 3 chassis presets, which are Rust data in
 //!   `robco-config`'s `presets`, not files.

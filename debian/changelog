@@ -18,8 +18,8 @@ robco-term (0.3.1) unstable; urgency=medium
     nearest to it; a scalable face draws it exactly. general.font_scaling
     is gone, and a config file still carrying it is read with it
     ignored. general.window_scaling sizes the cabinet, not the type.
-  * Moving the window to a display of another density draws the type at
-    the new density and resizes the session once.
+  * Moving the window to a display of another scale draws the type at
+    the new scale and resizes the session once.
   * A hovered link's underline is one pixel deep, the same on text the
     program underlined as on plain text.
   * A click on the curved glass lands on the cell drawn under the

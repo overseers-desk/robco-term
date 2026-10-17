@@ -58,7 +58,7 @@ def find_harness(explicit):
         path = os.path.abspath(os.path.join(root, profile, "esctest-harness"))
         if os.path.exists(path):
             return path
-    sys.exit("esctest-harness not built: cargo build -p robco-term --bin esctest-harness")
+    sys.exit("esctest-harness not built: cargo build -p robco-core --bin esctest-harness")
 
 
 def run(harness, esctest_dir, logfile):

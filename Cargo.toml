@@ -16,9 +16,9 @@ members = [
 
 # The product's version, in one place. Every crate inherits it, so
 # `app::VERSION` (what `--version` prints), the number `xtask dist`/`xtask
-# deb` stamp on their artifacts and every version a build log prints are the
-# same string by construction rather than by anyone remembering to change
-# several files.
+# deb` stamp on their artifacts and every version cargo prints as it builds
+# are the same string by construction rather than by anyone remembering to
+# change several files.
 #
 # Bumping it is a release decision, not a packaging one: `dist` and
 # `stage-deb` package whatever number is in the tree and never write to
