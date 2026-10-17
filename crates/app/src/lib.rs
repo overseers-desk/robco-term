@@ -4,7 +4,7 @@
 //! single-instance arbitration, the crash logger, and everything hanging
 //! inside a window: the wgpu surface, the rio-vt session behind it, the
 //! input path in front of it, and the live settings handle beside it.
-//! The terminal itself (`crates/term`) hangs inside it, and so does the
+//! The terminal itself (`crates/core`) hangs inside it, and so does the
 //! CRT pass graph (`crates/crt-render`): the grid is drawn into an
 //! offscreen target and the chain takes it from there to the swapchain,
 //! all inside [`window::TerminalSurface`]. The cabinet around the glass is

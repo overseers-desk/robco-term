@@ -9,7 +9,7 @@ asymmetry is what makes the file a ratchet rather than a lock.
 
 Usage:
 
-    python3 crates/term/tests/esctest/run.py [--esctest DIR] [--update]
+    python3 crates/core/tests/esctest/run.py [--esctest DIR] [--update]
 
 `DIR` is the directory holding esctest.py (default `~/code/esctest/esctest`).
 The harness binary is taken from CARGO_TARGET_DIR or ./target, debug then
@@ -135,7 +135,7 @@ def main():
     if args.update:
         with open(PASSLIST, "w") as f:
             f.write("# esctest tests that pass against the RobCo headless harness.\n")
-            f.write("# Regenerate: python3 crates/term/tests/esctest/run.py --update\n")
+            f.write("# Regenerate: python3 crates/core/tests/esctest/run.py --update\n")
             f.write("# Include regex: %s\n" % INCLUDE)
             f.write("# Geometry: %dx%d\n" % (COLS, ROWS))
             f.write("# xterm reverse-wrap generation: %s\n" % XTERM_REVERSE_WRAP)
@@ -145,7 +145,7 @@ def main():
         with open(GAPS, "w") as f:
             f.write("# esctest tests that do NOT pass, recorded so the gaps are\n")
             f.write("# visible rather than merely absent from the pass-list.\n")
-            f.write("# Regenerate: python3 crates/term/tests/esctest/run.py --update\n")
+            f.write("# Regenerate: python3 crates/core/tests/esctest/run.py --update\n")
             for name in failed:
                 f.write(name + "\n")
             for name in known:

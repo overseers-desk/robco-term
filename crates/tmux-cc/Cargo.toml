@@ -23,6 +23,6 @@ path = "src/lib.rs"
 # Inappropriate ioctl for device"), so both the transcript recorder and the
 # live round-trip test have to raise one. This is the same PTY the shipping
 # gateway session uses (`term::Session`), reached directly rather than through
-# `robco-term` so that the codec's test tree does not pull in a grid, an atlas
+# `robco-core` so that the codec's test tree does not pull in a grid, an atlas
 # and a GPU device to talk to a subprocess.
 rio-vt = { version = "=0.5.24", default-features = false, features = ["pty"] }

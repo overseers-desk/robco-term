@@ -277,7 +277,7 @@ spurious refusal and never a false accept; `docs/ssh.md` carries the full
 contract.
 
 MIT licensed, in `LICENSE`. The bundled faces keep their own licences,
-beside each one under `crates/term/assets/fonts/`.
+beside each one under `crates/core/assets/fonts/`.
 
 `cargo run -p xtask -- verify <path-to-binary>` walks a built binary through
 the window and CLI contract item by item and tells you which parts this

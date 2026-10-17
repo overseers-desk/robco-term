@@ -18,7 +18,7 @@ path = "src/lib.rs"
 robco-config = { path = "../config" }
 # The proven glyph raster (`fonts::led`) and its font catalogue: what both
 # display kits compose into a texture.
-robco-term = { path = "../term" }
+robco-core = { path = "../core" }
 
 # Nothing from `robco-crt-render` here: decision (b) is that the chassis stays
 # off the glass chain, in the dependency graph as well as in the pixels. Its

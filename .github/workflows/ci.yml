@@ -55,7 +55,7 @@ jobs:
           name: robco-settings-windows-x86_64
           path: settings/dist/robco-settings.exe
       - run: cargo build --release -p robco-app --features embedded-settings
-      - run: cargo test --release -p robco-term --test suite fallback
+      - run: cargo test --release -p robco-core --test suite fallback
       # The exe must speak before it may ship: a GUI-subsystem binary that
       # dies in startup dies without a console to say so, and this is the
       # only Windows machine that runs it before a tester does.
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p robco-app
-      - run: cargo test --release -p robco-term --test suite fallback
+      - run: cargo test --release -p robco-core --test suite fallback
       # The pointer path is the one place where the two platforms disagree on
       # purpose: Control with the left button is the secondary click here and
       # a selection everywhere else, so the arm that says so runs nowhere but

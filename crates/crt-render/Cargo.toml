@@ -20,7 +20,7 @@ harness = ["robco-gpu/harness"]
 
 [dependencies]
 robco-config = { path = "../config" }
-robco-term = { path = "../term" }
+robco-core = { path = "../core" }
 # The frame-source slot's second occupant (`crt::preset::CHASSIS_FRAME`): its
 # body, `chassis::shaders::FRAME_METAL_SLANG`, and the uniform set that body
 # reads, `chassis::frame::frame_params` under the profile's own shell. The

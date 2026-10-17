@@ -1,6 +1,6 @@
 # esctest tests that do NOT pass, recorded so the gaps are
 # visible rather than merely absent from the pass-list.
-# Regenerate: python3 crates/term/tests/esctest/run.py --update
+# Regenerate: python3 crates/core/tests/esctest/run.py --update
 HTSTests.test_HTS_8bit  # esctest expects this to fail on xterm too
 INDTests.test_IND_8bit  # esctest expects this to fail on xterm too
 NELTests.test_NEL_8bit  # esctest expects this to fail on xterm too

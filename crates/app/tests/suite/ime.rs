@@ -40,7 +40,7 @@
 //!    left behind on the glass after a commit.
 //!
 //! Everything up to the framework is measured: the pre-edit's pixels in
-//! `crates/term/tests/preedit.rs`, the caret rectangle below.
+//! `crates/core/tests/preedit.rs`, the caret rectangle below.
 //!
 //! Not run here, and not claimed here.
 //!

@@ -1,5 +1,5 @@
 [package]
-name = "robco-term"
+name = "robco-core"
 version = "0.1.0"
 edition = "2021"
 # rio-vt publishes no `rust-version`; the Rio workspace it is cut from pins

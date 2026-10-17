@@ -4,12 +4,12 @@ members = [
     "crates/app",
     "crates/chassis",
     "crates/config",
+    "crates/core",
     "crates/critters",
     "crates/crt-render",
     "crates/gpu",
     "crates/shader-oracle",
     "crates/ssh-link",
-    "crates/term",
     "crates/tmux-cc",
     "crates/xtask",
 ]

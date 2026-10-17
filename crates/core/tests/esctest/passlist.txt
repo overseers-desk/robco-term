@@ -1,5 +1,5 @@
 # esctest tests that pass against the RobCo headless harness.
-# Regenerate: python3 crates/term/tests/esctest/run.py --update
+# Regenerate: python3 crates/core/tests/esctest/run.py --update
 # Include regex: ^(CUP|CUU|CUD|CUF|CUB|CHA|VPA|HPA|HVP|CR|LF|BS|IND|RI|NEL|ED|EL|ECH|ICH|DCH|IL|DL|SU|SD|DECSTBM|DECALN|DECSC|DECRC|CBT|CHT|HTS|TBC|REP)Tests\.
 # Geometry: 80x25
 # xterm reverse-wrap generation: 383

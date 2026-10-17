@@ -12,7 +12,7 @@
 //! `screen.margin` is the proof key: with curvature and frame size held at
 //! (approximately) zero, `term::distortion::correct_distortion` reduces to
 //! `x_grid = x_well - grid_origin` exactly (see
-//! `crates/term/src/distortion.rs`'s `zero_curvature_reduces_to_the_frame_origin_linear_map`
+//! `crates/core/src/distortion.rs`'s `zero_curvature_reduces_to_the_frame_origin_linear_map`
 //! test), and the margin sets that origin by shrinking the grid the
 //! renderer centres in the well. So a margin change shifts which grid
 //! column a fixed well pixel lands on by a predictable number of cells,

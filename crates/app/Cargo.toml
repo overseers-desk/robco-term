@@ -51,7 +51,7 @@ russh-config = "0.58"
 # blocks apply to a host, and agreement is cheapest when it is the same
 # matcher.
 globset = "0.4"
-robco-term = { path = "../term" }
+robco-core = { path = "../core" }
 # The feature set this crate's surface device is created with. The CRT chain
 # runs on that device and both features it wants have to be asked for at
 # creation, so the answer comes from the crate that owns it.
@@ -81,7 +81,7 @@ winit = "0.30"
 libc = "0.2"
 # `regex::escape` alone, for the find line: what the user types is looked for
 # literally, so the query is escaped before it reaches rio-vt's regex search.
-# The same version `robco-term` pins, and already in the graph through it, so
+# The same version `robco-core` pins, and already in the graph through it, so
 # this is a name for a dependency rather than a new one.
 regex = "1.13"
 directories = "5"

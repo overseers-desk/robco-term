@@ -3672,12 +3672,12 @@ dependencies = [
  "regex",
  "robco-chassis",
  "robco-config",
+ "robco-core",
  "robco-critters",
  "robco-crt-render",
  "robco-gpu",
  "robco-shader-oracle",
  "robco-ssh-link",
- "robco-term",
  "robco-tmux-cc",
  "russh-config",
  "serde_json",
@@ -3694,9 +3694,9 @@ name = "robco-chassis"
 version = "0.1.0"
 dependencies = [
  "robco-config",
+ "robco-core",
  "robco-gpu",
  "robco-shader-oracle",
- "robco-term",
  "wgpu",
 ]
 
@@ -3714,6 +3714,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "robco-core"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cosmic-text",
+ "fontconfig-parser",
+ "log",
+ "png",
+ "regex",
+ "rio-vt",
+ "robco-gpu",
+ "serde_json",
+ "swash",
+ "ttf-parser",
+ "unicode-width",
+ "wgpu",
+]
+
+[[package]]
 name = "robco-critters"
 version = "0.1.0"
 dependencies = [
@@ -3728,10 +3747,10 @@ dependencies = [
  "librashader",
  "robco-chassis",
  "robco-config",
+ "robco-core",
  "robco-crt-render",
  "robco-gpu",
  "robco-shader-oracle",
- "robco-term",
  "wgpu",
 ]
 
@@ -3760,25 +3779,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-stream",
-]
-
-[[package]]
-name = "robco-term"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "cosmic-text",
- "fontconfig-parser",
- "log",
- "png",
- "regex",
- "rio-vt",
- "robco-gpu",
- "serde_json",
- "swash",
- "ttf-parser",
- "unicode-width",
- "wgpu",
 ]
 
 [[package]]
