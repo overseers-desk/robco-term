@@ -29,6 +29,7 @@ use term::rio_vt::crosswords::grid::Dimensions;
 use term::rio_vt::crosswords::pos::Side;
 use term::rio_vt::crosswords::Mode;
 use term::selection;
+use term::TermSize;
 use winit::dpi::PhysicalPosition;
 use winit::event::{MouseButton, MouseScrollDelta};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
@@ -58,9 +59,9 @@ impl TerminalSurface {
 
     /// [`settings::distortion_params`] for this window's well, under whatever
     /// [`TerminalSurface::set_settings`] last attached.
-    pub(super) fn distortion_params(&self) -> DistortionParams {
+    pub(super) fn distortion_params(&self, grid: TermSize) -> DistortionParams {
         let config = self.settings.as_ref().map(|handle| handle.current());
-        settings::distortion_params(config.as_ref(), &self.viewport)
+        settings::distortion_params(config.as_ref(), &self.viewport, grid)
     }
 
     /// A window pixel becomes an absolute grid cell: measured from the well's
@@ -76,9 +77,9 @@ impl TerminalSurface {
     /// The side is what the rio selection model anchors on: it points at the
     /// seam between two cells, so a drag begun on the right half of a
     /// character starts after that character. The Konsole model ignores it.
-    fn cell_side_at(&self, position: PhysicalPosition<f64>) -> ((usize, usize), Side) {
-        let point = self.grid_point(position);
-        let size = self.viewport.term_size();
+    fn cell_side_at(&self, position: PhysicalPosition<f64>) -> Option<((usize, usize), Side)> {
+        let size = self.on_air_size()?;
+        let point = self.grid_point(position, size);
         let (column, side) = size.column_side_at(point.x);
         // The picture is drawn shifted up by the position's fraction of a
         // row, so a point on the glass is that much further down the grid.
@@ -92,23 +93,26 @@ impl TerminalSurface {
             size.rows().saturating_sub(1)
         };
         let row = row.clamp(0.0, last as f64) as usize;
-        ((column, self.top_line() + row), side)
+        Some(((column, self.top_line() + row), side))
     }
 
     /// A window pixel in the grid's own space: past the bank column and
     /// through the inverse distortion, measured from the grid's corner.
-    fn grid_point(&self, position: PhysicalPosition<f64>) -> distortion::Point {
+    fn grid_point(&self, position: PhysicalPosition<f64>, grid: TermSize) -> distortion::Point {
         let x = position.x - f64::from(self.bank_physical());
-        correct_distortion(x, position.y, &self.distortion_params())
+        correct_distortion(x, position.y, &self.distortion_params(grid))
     }
 
     /// Whether a window pixel lands outside the grid's rectangle: on the
     /// margin, the bezel, or the bank's casting. The picture slides inside
     /// that rectangle while scrolled, so the test is on the rectangle, not
-    /// the row.
+    /// the row. With no channel on the air there is no grid to be on.
     fn off_grid(&self, position: PhysicalPosition<f64>) -> bool {
-        let point = self.grid_point(position);
-        let (width, height) = self.viewport.term_size().pixel_size();
+        let Some(size) = self.on_air_size() else {
+            return true;
+        };
+        let point = self.grid_point(position, size);
+        let (width, height) = size.pixel_size();
         !(0.0..f64::from(width)).contains(&point.x) || !(0.0..f64::from(height)).contains(&point.y)
     }
 
@@ -137,13 +141,13 @@ impl TerminalSurface {
         }
     }
 
-    pub(super) fn selection_window(&self) -> selection::Window {
-        let size = self.viewport.term_size();
-        selection::Window {
+    pub(super) fn selection_window(&self) -> Option<selection::Window> {
+        let size = self.on_air_size()?;
+        Some(selection::Window {
             top_line: self.top_line(),
             lines: size.rows(),
             columns: size.cols(),
-        }
+        })
     }
 
     pub(super) fn mode_contains(&self, mode: Mode) -> bool {
@@ -281,7 +285,7 @@ impl TerminalSurface {
             "{gesture} at {cell:?}: {:?}, {} characters; columns: window {}, grid {}, selection {}",
             self.selection.range(session.term()),
             text.as_ref().map_or(0, |t| t.chars().count()),
-            self.selection_window().columns,
+            self.selection_window().map_or(0, |win| win.columns),
             session.term().grid.columns(),
             self.selection.columns(),
         );
@@ -336,7 +340,9 @@ impl TerminalSurface {
         let Some(button) = pointer_button(button) else {
             return;
         };
-        let (cell, side) = self.cell_side_at(position);
+        let Some((cell, side)) = self.cell_side_at(position) else {
+            return;
+        };
         self.pointer_cell = cell;
         self.pointer_present = true;
 
@@ -432,7 +438,9 @@ impl TerminalSurface {
             return;
         };
         let mods = modifiers_from(modifiers);
-        let (cell, side) = self.cell_side_at(position);
+        let Some((cell, side)) = self.cell_side_at(position) else {
+            return;
+        };
         self.pointer_cell = cell;
 
         // Before the drag's own release below, which returns: the press
@@ -482,7 +490,9 @@ impl TerminalSurface {
             self.set_hover(None);
             return;
         }
-        let (cell, side) = self.cell_side_at(position);
+        let Some((cell, side)) = self.cell_side_at(position) else {
+            return;
+        };
         // Every pointer path is expressed in cells, so a move within one
         // cell has nothing to say, including to a program tracking
         // motion, which is addressed in cells too.

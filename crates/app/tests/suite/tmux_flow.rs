@@ -26,8 +26,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
 use std::time::{Duration, Instant};
 
+use app::shell::Surface;
 use app::window::TerminalSurface;
+use term::rio_vt::crosswords::grid::Dimensions;
 use term::{viewport_text, CellSize, SessionConfig, Viewport};
+use winit::dpi::PhysicalSize;
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 
 const TMUX: &str = "/usr/bin/tmux";
@@ -1290,4 +1293,141 @@ fn phase_18_paging_home_off_a_first_channels_attach_tunes_the_glass_to_no_signal
     });
     let landed = surface.channels().on_air();
     assert_eq!(landed, (0, 2), "beside the row that took the berth");
+}
+
+/// The active pane of every window of session `one`, at the size tmux gave
+/// it.
+fn pane_sizes(server: &Server) -> Vec<(String, usize, usize)> {
+    let format = "#{window_id} #{pane_active} #{pane_width} #{pane_height}";
+    server
+        .run(&["list-panes", "-s", "-t", "one", "-F", format])
+        .lines()
+        .filter_map(|line| match line.split(' ').collect::<Vec<_>>()[..] {
+            [window, "1", width, height] => Some((
+                window.to_string(),
+                width.parse().ok()?,
+                height.parse().ok()?,
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The grid each of those windows' channels stands at.
+fn channel_sizes(
+    surface: &TerminalSurface,
+    bank: u32,
+    panes: &[(String, usize, usize)],
+) -> Vec<(String, usize, usize)> {
+    panes
+        .iter()
+        .filter_map(|(window, _, _)| {
+            let grid = &row_of(surface, bank, window)?.session.term().grid;
+            Some((window.clone(), grid.columns(), grid.screen_lines()))
+        })
+        .collect()
+}
+
+/// The plain client's screen as tmux holds it.
+fn plain_client(server: &Server) -> (usize, usize) {
+    let format = "#{client_control_mode} #{client_width} #{client_height}";
+    server
+        .run(&["list-clients", "-F", format])
+        .lines()
+        .find_map(|line| match line.split(' ').collect::<Vec<_>>()[..] {
+            ["0", width, height] => Some((width.parse().ok()?, height.parse().ok()?)),
+            _ => None,
+        })
+        .expect("a plain client")
+}
+
+/// Pump both surfaces until every channel stands at its pane's size, or
+/// the deadline passes; answers both sides for the assertion to compare.
+type Sizes = Vec<(String, usize, usize)>;
+fn settled(
+    surface: &mut TerminalSurface,
+    other: &mut TerminalSurface,
+    server: &Server,
+    bank: u32,
+) -> (Sizes, Sizes) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        surface.pump();
+        other.pump();
+        let panes = pane_sizes(server);
+        let channels = channel_sizes(surface, bank, &panes);
+        if panes == channels || Instant::now() > deadline {
+            return (panes, channels);
+        }
+        std::thread::sleep(Duration::from_millis(15));
+    }
+}
+
+/// A plain `tmux attach` on the same session, typed in a channel of its own
+/// as the owner runs one. Under tmux's `window-size latest` a window shared
+/// by two clients follows the one last active on it, and the gateway's
+/// `send-keys` is no activity, so tmux's sizes part from the glass: a
+/// window grows to the plain client, and one the gateway asked for keeps the
+/// size it was born at. Every channel is drawn at the size tmux gave its
+/// pane, whatever the glass is.
+#[test]
+fn phase_19_with_a_second_client_on_the_session_every_channel_stands_at_its_panes_size() {
+    if !have_tmux() {
+        return;
+    }
+    let server = Server::start();
+    let mut surface = surface();
+    let bank = attach(&mut surface, &server);
+
+    // No status line, so a window the plain client sizes is its whole screen.
+    server.run(&["set-option", "-g", "status", "off"]);
+    let plain = Viewport::new(1530, 738, 1.0, CellSize::new(9.0, 18.0));
+    let mut other = TerminalSurface::headless(&shell(), plain);
+    let line = format!("{TMUX} -S {} attach -t one\r", server.socket.display());
+    other.write(line.as_bytes());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while server.clients() < 2 && Instant::now() < deadline {
+        surface.pump();
+        other.pump();
+        std::thread::sleep(Duration::from_millis(15));
+    }
+    assert_eq!(server.clients(), 2, "the plain client attached");
+
+    // A key through the plain client makes it the window's latest client,
+    // and the window grows to it, past the glass.
+    other.write(b"x");
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    assert_eq!(channels, panes);
+    let (_, width, height) = &panes[0];
+    assert_eq!(
+        (*width, *height),
+        plain_client(&server),
+        "the window followed the plain client"
+    );
+
+    // A window the gateway asks for, then a glass that grows: tmux finds no
+    // latest client for the new window and leaves it as it was born.
+    surface.new_channel();
+    pump_until(&mut surface, "the asked-for window to take the air", |s| {
+        s.channels().current_channel() == 3
+    });
+    surface.resized(PhysicalSize::new(900, 580));
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    assert_eq!(channels, panes);
+
+    // The plain client shrinks below the glass: the window it shows follows
+    // it down, and so does that window's channel.
+    other.resized(PhysicalSize::new(540, 310));
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    assert_eq!(channels, panes);
+    let shown = window_on_air(&surface).to_string();
+    let pane = panes
+        .iter()
+        .find(|(w, _, _)| *w == shown)
+        .expect("the window on the air");
+    assert_eq!(
+        (pane.1, pane.2),
+        plain_client(&server),
+        "the shared window follows the smaller client"
+    );
 }

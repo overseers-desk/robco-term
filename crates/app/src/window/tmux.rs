@@ -16,7 +16,7 @@
 
 use std::time::{Duration, Instant};
 
-use term::{ChannelSession, TmuxPane};
+use term::{ChannelSession, TermSize, TmuxPane};
 use tmux_cc::{PaneId, SessionId};
 
 use crate::channels::{BankId, Manager};
@@ -278,8 +278,14 @@ impl TerminalSurface {
         for event in events {
             match event {
                 GatewayEvent::HostChanged(host) => self.channels.host_changed(bank, &host),
-                GatewayEvent::WindowAdded { window, pane, name } => {
-                    let size = self.viewport.term_size();
+                GatewayEvent::WindowAdded {
+                    window,
+                    pane,
+                    name,
+                    columns,
+                    rows,
+                } => {
+                    let size = self.pane_size(columns, rows);
                     let scrollback = self.session_config.scrollback;
                     let clustering = self.grapheme_clustering();
                     let opened =
@@ -306,6 +312,28 @@ impl TerminalSurface {
                 }
                 GatewayEvent::WindowClosed { window } => {
                     self.channels.window_closed(bank, &window);
+                }
+                GatewayEvent::PaneResized {
+                    window,
+                    columns,
+                    rows,
+                } => {
+                    let size = self.pane_size(columns, rows);
+                    let row = self.channels.rows_mut().find(|r| {
+                        r.bank == bank && r.tmux.as_ref().is_some_and(|(w, _)| *w == window)
+                    });
+                    if let Some(row) = row {
+                        let on_air = (row.bank, row.channel) == current;
+                        if let Some(pane_session) = row.session.tmux_pane_mut() {
+                            pane_session.resize(size);
+                        }
+                        // A program that does not repaint on SIGWINCH sends
+                        // nothing, and the glass must still show the new grid.
+                        if on_air {
+                            self.settle_selection_columns();
+                            self.output_pending = true;
+                        }
+                    }
                 }
                 GatewayEvent::WindowPaneChanged { window, pane } => {
                     // The channel keeps its emulation and scrollback; only
@@ -371,6 +399,13 @@ impl TerminalSurface {
             }
         }
         log::info!("tmux: bank {bank} collapsed (protocol lost: {lost_protocol})");
+    }
+
+    /// A pane's screen at the size tmux gave it, in the glass's cell: the
+    /// cell is the font's, which tmux knows nothing of.
+    fn pane_size(&self, columns: u16, rows: u16) -> TermSize {
+        let (width, height) = self.viewport.physical_cell();
+        TermSize::new(usize::from(columns), usize::from(rows), width, height)
     }
 
     /// The client-size law: one client, one geometry, told to every

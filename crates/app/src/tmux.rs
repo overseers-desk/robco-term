@@ -146,11 +146,21 @@ pub enum GatewayEvent {
         sessions: Vec<(SessionId, String)>,
     },
     /// A window needs a channel: `channels::Channels::open_tmux_window`,
-    /// then [`Gateway::attach_window`] if the slot was granted.
+    /// then [`Gateway::attach_window`] if the slot was granted. The channel's
+    /// screen is the size tmux gave the pane, not the glass's.
     WindowAdded {
         window: WindowId,
         pane: PaneId,
         name: String,
+        columns: u16,
+        rows: u16,
+    },
+    /// The size tmux now gives the pane this window shows:
+    /// `term::TmuxPane::resize` on the window's row.
+    PaneResized {
+        window: WindowId,
+        columns: u16,
+        rows: u16,
     },
     /// `channels::Channels::set_title` on the window's row.
     WindowRenamed { window: WindowId, name: String },
@@ -611,27 +621,37 @@ impl<W: Write> Gateway<W> {
                 });
             }
             Intent::ListPanes => {
-                // "<window id> <pane id> <pane active> <window name>"; the
-                // name is the remainder and may hold spaces (cpp:376-394).
-                // Names in a listing are format output, raw on the wire --
-                // only notification names are vis(3)-escaped.
+                // "<window id> <pane id> <pane active> <width> <height>
+                // <window name>"; the name is the remainder and may hold
+                // spaces (cpp:376-394). Names in a listing are format output,
+                // raw on the wire -- only notification names are
+                // vis(3)-escaped.
                 for line in block.text() {
-                    let fields: Vec<&str> = line.splitn(4, ' ').collect();
-                    if fields.len() < 4 || fields[2] != "1" {
+                    let fields: Vec<&str> = line.splitn(6, ' ').collect();
+                    if fields.len() < 6 || fields[2] != "1" {
                         continue; // only a window's active pane is shown
                     }
-                    let (Some(window), Some(pane)) =
-                        (WindowId::parse(fields[0]), PaneId::parse(fields[1]))
-                    else {
+                    let (Some(window), Some(pane), Ok(columns), Ok(rows)) = (
+                        WindowId::parse(fields[0]),
+                        PaneId::parse(fields[1]),
+                        fields[3].parse(),
+                        fields[4].parse(),
+                    ) else {
                         continue;
                     };
                     if self.windows.contains_key(&window) {
                         continue; // a %window-add re-listing: only the new window is news
                     }
-                    let name = fields[3].to_string();
+                    let name = fields[5].to_string();
                     self.windows.insert(window.clone(), pane.clone());
                     self.names.insert(window.clone(), name.clone());
-                    out.push(GatewayEvent::WindowAdded { window, pane, name });
+                    out.push(GatewayEvent::WindowAdded {
+                        window,
+                        pane,
+                        name,
+                        columns,
+                        rows,
+                    });
                 }
                 if !self.bootstrapped {
                     self.bootstrapped = true;
@@ -711,16 +731,31 @@ impl<W: Write> Gateway<W> {
                 self.finish_pane_bootstrap(&pane, &cursor, out);
             }
             Intent::LayoutPanes(window) => {
-                // The window's panes as they stand; only which one is active
-                // matters while a window shows one pane (cpp:460-472).
+                // The window's panes as they stand: which one is active, and
+                // its size, because a window shows one pane (cpp:460-472).
+                // tmux lays a window out again on every resize, so this
+                // re-query is where the channel learns the size tmux settled
+                // on. The size goes first: a switch's capture is drawn at it.
                 let mut active = None;
                 for line in block.text() {
                     let fields: Vec<&str> = line.split_whitespace().collect();
-                    if fields.len() >= 2 && fields[1] == "1" {
-                        active = PaneId::parse(fields[0]);
+                    if fields.len() < 4 || fields[1] != "1" {
+                        continue;
+                    }
+                    if let (Some(pane), Ok(columns), Ok(rows)) = (
+                        PaneId::parse(fields[0]),
+                        fields[2].parse(),
+                        fields[3].parse(),
+                    ) {
+                        active = Some((pane, columns, rows));
                     }
                 }
-                if let Some(pane) = active {
+                if let Some((pane, columns, rows)) = active {
+                    out.push(GatewayEvent::PaneResized {
+                        window: window.clone(),
+                        columns,
+                        rows,
+                    });
                     self.switch_active_pane(&window, pane, out);
                 }
             }
@@ -1049,7 +1084,7 @@ mod tests {
     fn attach<W: Write>(gateway: &mut Gateway<W>) -> Vec<GatewayEvent> {
         let mut events =
             gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
-        events.extend(gateway.advance(reply(1, "@0 %0 1 bash").as_bytes()));
+        events.extend(gateway.advance(reply(1, "@0 %0 1 80 24 bash").as_bytes()));
         events.extend(gateway.advance(reply(2, "$0 one").as_bytes()));
         events.extend(gateway.advance(reply(3, "@0 bash").as_bytes()));
         events
@@ -1062,7 +1097,7 @@ mod tests {
             wire.lines(),
             vec![
                 r##"display-message -p "#{socket_path} #{pid} #{session_id} #{host_short}""##,
-                r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{window_name}""##,
+                r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##,
                 r##"list-sessions -F "#{session_id} #{session_name}""##,
             ]
         );
@@ -1074,7 +1109,7 @@ mod tests {
     fn a_session_listing_names_the_whole_server_and_the_session_this_client_is_on() {
         let (mut gateway, _wire) = gateway();
         gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
-        gateway.advance(reply(1, "@0 %0 1 bash").as_bytes());
+        gateway.advance(reply(1, "@0 %0 1 80 24 bash").as_bytes());
         let events = gateway.advance(reply(2, "$0 one\n$3 two three").as_bytes());
         assert_eq!(
             events,
@@ -1134,7 +1169,8 @@ mod tests {
         let (mut gateway, wire) = gateway();
         let mut events =
             gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
-        events.extend(gateway.advance(reply(1, "@0 %0 1 bash\n@1 %1 1 logs").as_bytes()));
+        events
+            .extend(gateway.advance(reply(1, "@0 %0 1 80 24 bash\n@1 %1 1 80 24 logs").as_bytes()));
         // Only active panes make windows; the sweep went out after the
         // first listing.
         assert_eq!(
@@ -1145,11 +1181,15 @@ mod tests {
                     window: WindowId::parse("@0").unwrap(),
                     pane: PaneId::parse("%0").unwrap(),
                     name: "bash".into(),
+                    columns: 80,
+                    rows: 24,
                 },
                 GatewayEvent::WindowAdded {
                     window: WindowId::parse("@1").unwrap(),
                     pane: PaneId::parse("%1").unwrap(),
                     name: "logs".into(),
+                    columns: 80,
+                    rows: 24,
                 },
             ]
         );
@@ -1221,14 +1261,56 @@ mod tests {
         assert_eq!(gateway.advance(b"%window-add @1\r\n"), vec![]);
         assert!(wire.lines()[0].starts_with("list-panes -s"));
         // The re-listing (command 4) carries both windows; only @1 lands.
-        let events = gateway.advance(reply(4, "@0 %0 1 bash\n@1 %1 1 fresh").as_bytes());
+        let events =
+            gateway.advance(reply(4, "@0 %0 1 80 24 bash\n@1 %1 1 80 24 fresh").as_bytes());
         assert_eq!(
             events,
             vec![GatewayEvent::WindowAdded {
                 window: WindowId::parse("@1").unwrap(),
                 pane: PaneId::parse("%1").unwrap(),
                 name: "fresh".into(),
+                columns: 80,
+                rows: 24,
             }]
+        );
+    }
+
+    /// tmux lays a window out again whenever it resizes it, and the
+    /// re-query's answer is the size the channel is drawn at: before the
+    /// pane switch, whose capture lands at that size.
+    #[test]
+    fn a_layout_change_reports_the_size_tmux_gave_the_shown_pane() {
+        let (mut gateway, wire) = gateway();
+        attach(&mut gateway);
+        wire.clear();
+        let layout = "%layout-change @0 b25d,100x30,0,0,0 b25d,100x30,0,0,0 *\r\n";
+        assert_eq!(gateway.advance(layout.as_bytes()), vec![]);
+        assert!(wire.lines()[0].starts_with("list-panes -t @0"));
+        let events = gateway.advance(reply(4, "%0 1 100 30").as_bytes());
+        assert_eq!(
+            events,
+            vec![GatewayEvent::PaneResized {
+                window: WindowId::parse("@0").unwrap(),
+                columns: 100,
+                rows: 30,
+            }]
+        );
+        // A split hands the window another active pane, at its own size.
+        gateway.advance(layout.as_bytes());
+        let events = gateway.advance(reply(5, "%0 0 100 14\n%2 1 100 15").as_bytes());
+        assert_eq!(
+            events,
+            vec![
+                GatewayEvent::PaneResized {
+                    window: WindowId::parse("@0").unwrap(),
+                    columns: 100,
+                    rows: 15,
+                },
+                GatewayEvent::WindowPaneChanged {
+                    window: WindowId::parse("@0").unwrap(),
+                    pane: PaneId::parse("%2").unwrap(),
+                },
+            ]
         );
     }
 
@@ -1437,7 +1519,7 @@ mod tests {
         );
         assert_eq!(
             lines[1],
-            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{window_name}""##
+            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##
         );
         assert_eq!(
             lines[2],
@@ -1614,7 +1696,7 @@ mod tests {
         // Blocks that carry exactly what the bootstrap asked for, every one
         // of them flagged 0.
         let burst = "%begin 1 50 0\r\n/tmp/tmux-1000/default 4242 $0 prime\r\n%end 1 50 0\r\n\
-                     %begin 1 51 0\r\n@0 %0 1 bash\r\n%end 1 51 0\r\n";
+                     %begin 1 51 0\r\n@0 %0 1 80 24 bash\r\n%end 1 51 0\r\n";
         assert_eq!(gateway.advance(burst.as_bytes()), vec![]);
 
         // Inside the deadline this is only a slow attach.

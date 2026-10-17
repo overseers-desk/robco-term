@@ -107,7 +107,7 @@ fn both_crates_bend_by_the_same_frame_and_curvature() {
         let mut pacing = crt::Pacing::new(Instant::now());
         let time = pacing.tick_by(Duration::from_millis(16));
         let uniforms = Params::build(&cfg, &geom, time, DegaussState::IDLE);
-        let pointer = app::settings::distortion_params(Some(&cfg), &viewport);
+        let pointer = app::settings::distortion_params(Some(&cfg), &viewport, viewport.term_size());
 
         for (name, un_bent) in [
             ("FrameSize", pointer.frame_size),

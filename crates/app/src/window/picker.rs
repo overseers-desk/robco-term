@@ -71,12 +71,16 @@ impl TerminalSurface {
         };
         let slot = picker.slot;
         let bytes = crate::picker::paint(&self.live_config().ssh.hosts, picker);
+        let size = self.viewport.term_size();
         if let Some(row) = self
             .channels
             .rows_mut()
             .find(|r| r.bank == 0 && r.channel == slot)
         {
+            // The page rides a pane's screen, but no tmux sizes it: the
+            // window does, at the glass's size.
             if let Some(screen) = row.session.tmux_pane_mut() {
+                screen.resize(size);
                 screen.feed(&bytes);
             }
         }

@@ -60,13 +60,15 @@ pub enum Command {
     ListSessions,
 
     /// The pane listing shared by the bootstrap and the `%window-add`
-    /// re-query: one line per pane, across every window of the session.
+    /// re-query: one line per pane, across every window of the session, with
+    /// the size tmux gave the pane.
     ListPanes,
 
     /// The window listing behind the rename sweep.
     ListWindows,
 
-    /// One window's panes and which is active, the `%layout-change` re-query.
+    /// One window's panes, which is active and how big each is: the
+    /// `%layout-change` re-query.
     ListWindowPanes(WindowId),
 
     /// A pane's screen and scrollback. `-p` to stdout, `-e` with escape
@@ -136,7 +138,9 @@ impl Command {
             ),
             Command::ListPanes => format!(
                 "list-panes -s -F {}",
-                quote_format("#{window_id} #{pane_id} #{pane_active} #{window_name}")
+                quote_format(
+                    "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}"
+                )
             ),
             Command::ListWindows => format!(
                 "list-windows -F {}",
@@ -145,7 +149,7 @@ impl Command {
             Command::ListWindowPanes(window) => format!(
                 "list-panes -t {} -F {}",
                 window,
-                quote_format("#{pane_id} #{pane_active}")
+                quote_format("#{pane_id} #{pane_active} #{pane_width} #{pane_height}")
             ),
             Command::CapturePane { pane, history } => {
                 // `-S -N` counts backwards from the top of the screen, so the
@@ -207,7 +211,7 @@ mod tests {
         );
         assert_eq!(
             Command::ListPanes.to_wire(),
-            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{window_name}""##
+            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##
         );
         assert_eq!(
             Command::ListSessions.to_wire(),
@@ -223,7 +227,7 @@ mod tests {
         );
         assert_eq!(
             Command::ListWindowPanes(WindowId::parse("@2").unwrap()).to_wire(),
-            r##"list-panes -t @2 -F "#{pane_id} #{pane_active}""##
+            r##"list-panes -t @2 -F "#{pane_id} #{pane_active} #{pane_width} #{pane_height}""##
         );
     }
 

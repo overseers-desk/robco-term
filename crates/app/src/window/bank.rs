@@ -224,6 +224,7 @@ impl TerminalSurface {
             // PRIMARY, and a middle click on any channel reads the string,
             // not the mark.
             self.selection.clear();
+            self.settle_selection_columns();
             // The view offset's authority is rio-vt's own `display_offset`,
             // which is the channel's, not the window's: `ScrollPosition` is a
             // mirror of it, so the channel coming to the screen brings its own

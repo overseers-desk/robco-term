@@ -164,15 +164,18 @@ fn the_bootstrap_replies_are_the_shapes_the_reference_reads() {
     assert_eq!(session.as_str(), "$0");
     assert!(!host.is_empty());
 
-    // list-panes: "<window> <pane> <active> <name>", one line per pane.
+    // list-panes: "<window> <pane> <active> <width> <height> <name>", one
+    // line per pane.
     let panes = blocks[1].text();
     assert_eq!(panes.len(), 2);
     for line in &panes {
-        let fields: Vec<&str> = line.splitn(4, ' ').collect();
-        assert_eq!(fields.len(), 4, "{line:?}");
+        let fields: Vec<&str> = line.splitn(6, ' ').collect();
+        assert_eq!(fields.len(), 6, "{line:?}");
         assert!(WindowId::parse(fields[0]).is_some(), "{line:?}");
         assert!(PaneId::parse(fields[1]).is_some(), "{line:?}");
         assert_eq!(fields[2], "1", "only active panes here: {line:?}");
+        assert!(fields[3].parse::<u16>().is_ok_and(|w| w > 0), "{line:?}");
+        assert!(fields[4].parse::<u16>().is_ok_and(|h| h > 0), "{line:?}");
     }
 
     // list-windows: "<window> <name>".

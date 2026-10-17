@@ -46,13 +46,13 @@ pub struct TmuxPane {
 }
 
 impl TmuxPane {
-    /// An empty screen of the glass's geometry.
+    /// An empty screen of the given size.
     ///
-    /// The geometry is the glass's and not the pane's, deliberately: every
-    /// channel is the same rectangle of glass, and tmux is told that size
-    /// once per client (`refresh-client -C`, the client-size law in
-    /// `app::channels`' module doc), so pane and glass agree except for
-    /// split windows, which the channel model does not draw.
+    /// For a tmux pane the size is tmux's, read off the pane listing: tmux
+    /// decides it from every client attached to the window, and the glass's
+    /// grid is only this client's request (`refresh-client -C`, the
+    /// client-size law in `app::channels`' module doc). A page the window
+    /// paints itself, the destination picker, is sized by the window.
     pub fn new(size: TermSize, scrollback: usize, grapheme_clustering: bool) -> Self {
         Self {
             term: crate::session::new_term(
@@ -84,9 +84,9 @@ impl TmuxPane {
         std::mem::take(&mut self.input)
     }
 
-    /// Reflow the grid. There is no `TIOCSWINSZ` half: the program behind
-    /// this screen sits on tmux's PTY, and tmux resizes it from the client
-    /// size the host publishes.
+    /// Reflow the grid to the size tmux reports for the pane. There is no
+    /// `TIOCSWINSZ` half: the program behind this screen sits on tmux's PTY,
+    /// and tmux has already resized it.
     pub fn resize(&mut self, size: TermSize) {
         if size == self.size {
             return;
@@ -181,13 +181,14 @@ impl<T: DcsTap> ChannelSession<T> {
         }
     }
 
-    pub fn resize(&mut self, size: TermSize) -> std::io::Result<()> {
+    /// The well is now this size. A PTY or an SSH channel takes it as its
+    /// screen at once. A tmux pane does not: tmux decides the pane's size,
+    /// the host asks for one through the gateway's client size, and the pane
+    /// is resized when tmux reports what it settled on.
+    pub fn well_resized(&mut self, size: TermSize) -> std::io::Result<()> {
         match self {
             ChannelSession::Pty(s) => s.resize(size),
-            ChannelSession::TmuxPane(s) => {
-                s.resize(size);
-                Ok(())
-            }
+            ChannelSession::TmuxPane(_) => Ok(()),
             ChannelSession::Ssh(s) => {
                 s.resize(size);
                 Ok(())

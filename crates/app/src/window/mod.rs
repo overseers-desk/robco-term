@@ -82,6 +82,7 @@ use crt::{Chain, Degauss, Geometry, Pacing, Params};
 use term::distortion;
 use term::fonts::sizing::SizingRequest;
 use term::hotspots::UrlFilterChain;
+use term::rio_vt::crosswords::grid::Dimensions;
 use term::rio_vt::crosswords::pos::Side;
 use term::rio_vt::crosswords::Mode;
 use term::selection::{Gesture, Kind, MarkedRange, SelectionModel};
@@ -89,7 +90,7 @@ use ssh_link::{AskDesk, Link};
 use term::{
     CellSize, ChannelSession, ControlModeTap, FontContext, FontEntry, GridRenderer, Marked,
     ResolvedFont, Scheme, ScrollPosition, Session, SessionConfig, Target,
-    Viewport,
+    TermSize, Viewport,
 };
 use tmux_cc::SessionId;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -1091,12 +1092,15 @@ impl TerminalSurface {
         // The grid's inset follows the live settings here as well as in
         // `apply_live_settings`, because a surface with no window never
         // redraws and would otherwise count its columns against a margin
-        // the settings have moved off. The pointer reads that same grid.
-        // A surface that attached no handle keeps the neutral inset, which
-        // is the geometry it was built with.
+        // the settings have moved off. The grid is re-divided on the spot:
+        // the margin taken here is no longer news to the redraw, and the
+        // pointer reads the grid. A surface that attached no handle keeps
+        // the neutral inset, which is the geometry it was built with.
         if let Some(handle) = self.settings.as_ref() {
             let cfg = handle.current();
-            self.ensure_margin(&cfg);
+            if self.ensure_margin(&cfg) {
+                self.relayout();
+            }
         }
         visible_bytes
     }
@@ -1253,7 +1257,7 @@ impl TerminalSurface {
             return None;
         }
         let (row, col) = (row as usize, cursor.pos.col.0);
-        let size = self.viewport.term_size();
+        let size = self.on_air_size()?;
         if row >= size.rows() || col >= size.cols() {
             return None;
         }
@@ -1262,7 +1266,7 @@ impl TerminalSurface {
         // space -- forward through the warp into well pixels. The picture
         // is drawn shifted up by the position's fraction of a row, and so
         // is the caret.
-        let params = self.distortion_params();
+        let params = self.distortion_params(size);
         let x = col as f64 * cell_w;
         let y = row as f64 * cell_h - f64::from(self.shift_physical());
         let top_left = distortion::forward_distort(x, y, &params);
@@ -2021,29 +2025,20 @@ impl TerminalSurface {
 
     fn sync_geometry(&mut self) {
         let size = self.viewport.term_size();
-        // A selection is a linear index over a grid of a given width, so
-        // it means something else at a new one. Konsole cleared it on
-        // resize for exactly that reason, and `set_columns` does.
-        if self.selection.columns() != size.cols() {
-            if self.dragging {
-                let cols = size.cols();
-                log::debug!("{cols} columns mid-drag: the drag marks nothing more");
-            }
-            self.selection.set_columns(size.cols());
-        }
         // Every channel, not only the one on the air. There is one rectangle
         // of glass in the appliance and every channel is laid into it, so a
         // channel resized only when it came back to the screen would redraw
         // its whole screen at the moment it was looked at -- resizing every
         // channel up front avoids exactly that flicker.
         for session in self.channels.sessions_mut() {
-            if let Err(e) = session.resize(size) {
+            if let Err(e) = session.well_resized(size) {
                 log::error!("could not resize the pty: {e}");
             }
         }
         // The picker's page is bytes already parsed, so a reflow leaves it
         // ragged: paint it again at the new geometry.
         self.paint_picker();
+        self.settle_selection_columns();
         // The client-size law's resize half: the glass's grid to every
         // gateway, debounced by the gateway itself against the drag's burst.
         self.set_client_size();
@@ -2051,6 +2046,33 @@ impl TerminalSurface {
             // The swapchain is the whole window; only the chain's picture is
             // the well.
             gpu.resize(self.window_size.0, self.window_size.1);
+        }
+    }
+
+    /// The grid on the air, as the pointer, the selection and the caret
+    /// measure it: the grid's own columns and rows, which a tmux pane takes
+    /// from tmux and not from the glass, in the glass's cell. `None` with no
+    /// channel on the air.
+    pub(super) fn on_air_size(&self) -> Option<TermSize> {
+        let grid = &self.channels.session()?.term().grid;
+        let (width, height) = self.viewport.physical_cell();
+        Some(TermSize::new(grid.columns(), grid.screen_lines(), width, height))
+    }
+
+    /// A selection is a linear index over a grid of a given width, so it
+    /// means something else at a new one. Konsole cleared it on resize for
+    /// exactly that reason, and `set_columns` does. The width is the grid's
+    /// on the air, which a channel switch or tmux's report can change with
+    /// the glass standing still.
+    pub(super) fn settle_selection_columns(&mut self) {
+        let Some(cols) = self.on_air_size().map(|size| size.cols()) else {
+            return;
+        };
+        if self.selection.columns() != cols {
+            if self.dragging {
+                log::debug!("{cols} columns mid-drag: the drag marks nothing more");
+            }
+            self.selection.set_columns(cols);
         }
     }
 
@@ -2088,7 +2110,9 @@ impl TerminalSurface {
     /// held, because the window is read off `self` and the grid is borrowed
     /// out of the channel model.
     fn begin_selection(&mut self, cell: (usize, usize), side: Side, mods: term::pointer::Modifiers) {
-        let win = self.selection_window();
+        let Some(win) = self.selection_window() else {
+            return;
+        };
         let Some(session) = self.channels.session_mut() else {
             return;
         };
@@ -2101,7 +2125,9 @@ impl TerminalSurface {
     }
 
     fn drag_selection_to(&mut self, cell: (usize, usize), side: Side) {
-        let win = self.selection_window();
+        let Some(win) = self.selection_window() else {
+            return;
+        };
         let Some(session) = self.channels.session_mut() else {
             return;
         };
@@ -2114,7 +2140,7 @@ impl TerminalSurface {
     }
 
     fn select_word_at(&mut self, cell: (usize, usize), side: Side) -> Option<String> {
-        let win = self.selection_window();
+        let win = self.selection_window()?;
         let session = self.channels.session_mut()?;
         let gesture = Gesture {
             term: session.term_mut(),
@@ -2125,7 +2151,7 @@ impl TerminalSurface {
     }
 
     fn select_line_at(&mut self, cell: (usize, usize), side: Side) -> Option<String> {
-        let win = self.selection_window();
+        let win = self.selection_window()?;
         let session = self.channels.session_mut()?;
         let gesture = Gesture {
             term: session.term_mut(),
@@ -2136,7 +2162,7 @@ impl TerminalSurface {
     }
 
     fn end_selection(&mut self, side: Side) -> Option<String> {
-        let win = self.selection_window();
+        let win = self.selection_window()?;
         let session = self.channels.session_mut()?;
         let gesture = Gesture {
             term: session.term_mut(),

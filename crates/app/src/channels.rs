@@ -23,7 +23,9 @@
 //! surface too: the glass's grid has to reach *every* gateway on attach and on
 //! resize, because a per-bank publish silently corrupts the sizes tmux draws
 //! other sessions at, and the surface's `set_client_size` is that law's one
-//! home.
+//! home. The grid is a request: tmux sizes each window from every client
+//! attached to it, and a pane's channel is drawn at the size tmux reports
+//! (`crate::tmux::GatewayEvent::PaneResized`).
 //!
 //! # One deliberate choice
 //!

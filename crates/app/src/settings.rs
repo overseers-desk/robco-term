@@ -34,7 +34,7 @@ use config::toml::ConfigError;
 use config::watch::ConfigWatcher;
 use config::Config;
 use term::distortion::{self, DistortionParams};
-use term::Viewport;
+use term::{TermSize, Viewport};
 
 /// The qualifier/organization/application triple handed to
 /// `directories::ProjectDirs`. No formal org exists for this project, so
@@ -286,11 +286,17 @@ pub fn unscaled_frame_size(config: &Config) -> f64 {
 /// picture is bent by the scale factor more than a click is un-bent and a
 /// press near the glass's edge lands a row in from the character under it.
 ///
-/// The margin is not a term here. It reaches the pointer the same way it
-/// reaches the picture, by shrinking `term_size` and so moving where the
-/// renderer centres the grid in the well (`term::distortion`).
-pub fn distortion_params(config: Option<&Config>, viewport: &Viewport) -> DistortionParams {
-    let (grid_width, grid_height) = viewport.term_size().pixel_size();
+/// `grid` is the grid on the air, whose size decides where the renderer
+/// centres it in the well. The margin is not a term here. It reaches the
+/// pointer the same way it reaches the picture, by shrinking the glass's
+/// grid (`Viewport::term_size`); a tmux pane may be smaller still, at the
+/// size tmux gave it (`term::distortion`).
+pub fn distortion_params(
+    config: Option<&Config>,
+    viewport: &Viewport,
+    grid: TermSize,
+) -> DistortionParams {
+    let (grid_width, grid_height) = grid.pixel_size();
     let width = f64::from(viewport.width);
     let height = f64::from(viewport.height);
     let scale = viewport.scale_factor.max(f64::EPSILON);
