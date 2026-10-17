@@ -1341,10 +1341,11 @@ fn plain_client(server: &Server) -> (usize, usize) {
         .expect("a plain client")
 }
 
-/// Pump both surfaces until every channel stands at its pane's size and
-/// `until` holds of what tmux reports, or the deadline passes; answers both
-/// sides for the assertions to compare.
 type Sizes = Vec<(String, usize, usize)>;
+
+/// Pump both surfaces until every channel stands at its pane's size and
+/// `until` holds of what tmux reports, or the deadline passes; returns tmux's
+/// pane sizes and the channels' sizes for the assertions to compare.
 fn settled(
     surface: &mut TerminalSurface,
     other: &mut TerminalSurface,

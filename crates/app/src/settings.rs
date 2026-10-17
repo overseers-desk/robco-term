@@ -287,10 +287,10 @@ pub fn unscaled_frame_size(config: &Config) -> f64 {
 /// press near the glass's edge lands a row in from the character under it.
 ///
 /// `grid` is the grid on the air, whose size decides where the renderer
-/// centres it in the well. The margin is not a term here. It reaches the
-/// pointer the same way it reaches the picture, by shrinking the glass's
-/// grid (`Viewport::term_size`); a tmux pane may be smaller still, at the
-/// size tmux gave it (`term::distortion`).
+/// centres it in the well (`term::distortion`). The margin is not a term
+/// here. It reaches the pointer the same way it reaches the picture, by
+/// shrinking the glass's grid (`Viewport::term_size`); a tmux pane's grid
+/// may be smaller still.
 pub fn distortion_params(
     config: Option<&Config>,
     viewport: &Viewport,

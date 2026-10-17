@@ -1092,10 +1092,10 @@ impl TerminalSurface {
         // The grid's inset follows the live settings here as well as in
         // `apply_live_settings`, because a surface with no window never
         // redraws and would otherwise count its columns against a margin
-        // the settings have moved off. The grid is re-divided on the spot:
-        // the margin taken here is no longer news to the redraw, and the
-        // pointer reads the grid. A surface that attached no handle keeps
-        // the neutral inset, which is the geometry it was built with.
+        // the settings have moved off. The grid is re-divided here as well,
+        // because once the margin is taken the redraw's own check finds
+        // nothing changed. A surface that attached no handle keeps the
+        // neutral inset, which is the geometry it was built with.
         if let Some(handle) = self.settings.as_ref() {
             let cfg = handle.current();
             if self.ensure_margin(&cfg) {

@@ -484,11 +484,9 @@ impl<W: Write> Gateway<W> {
         }
     }
 
-    /// The size last sent, for one window. Under `window-size latest` a
-    /// window shared with another client follows whichever client was last
-    /// active on it, and `send-keys` never makes this one so; a per-window
-    /// size caps the window whichever client it follows, and sizes it when
-    /// tmux finds none to follow.
+    /// The size last sent, for one window: the per-window half of the
+    /// client-size law (`crate::channels`' module doc). It also sizes a window
+    /// for which tmux finds no client to follow.
     fn window_size(&mut self, window: WindowId) {
         if let Some((columns, rows)) = self.sent_size {
             self.command(
