@@ -477,6 +477,29 @@ impl<W: Write> Gateway<W> {
         }
         self.sent_size = Some((columns, rows));
         self.command(&Command::ClientSize { columns, rows }, Intent::Ignore);
+        let mut windows: Vec<WindowId> = self.windows.keys().cloned().collect();
+        windows.sort();
+        for window in windows {
+            self.window_size(window);
+        }
+    }
+
+    /// The size last sent, for one window. Under `window-size latest` a
+    /// window shared with another client follows whichever client was last
+    /// active on it, and `send-keys` never makes this one so; a per-window
+    /// size caps the window whichever client it follows, and sizes it when
+    /// tmux finds none to follow.
+    fn window_size(&mut self, window: WindowId) {
+        if let Some((columns, rows)) = self.sent_size {
+            self.command(
+                &Command::WindowSize {
+                    window,
+                    columns,
+                    rows,
+                },
+                Intent::Ignore,
+            );
+        }
     }
 
     /// Route a window's active pane into a channel: register its gate and ask
@@ -645,6 +668,7 @@ impl<W: Write> Gateway<W> {
                     let name = fields[5].to_string();
                     self.windows.insert(window.clone(), pane.clone());
                     self.names.insert(window.clone(), name.clone());
+                    self.window_size(window.clone());
                     out.push(GatewayEvent::WindowAdded {
                         window,
                         pane,
@@ -1374,6 +1398,28 @@ mod tests {
         gateway.set_client_size(123, 41);
         gateway.poll(Instant::now() + RESIZE_DEBOUNCE);
         assert_eq!(wire.lines().len(), 1);
+    }
+
+    /// Every window gets the size too, so a window shared with another
+    /// client is capped at the glass whichever client tmux follows; a window
+    /// that arrives later gets the size already sent.
+    #[test]
+    fn the_client_size_goes_to_every_window_and_to_one_that_arrives() {
+        let (mut gateway, wire) = gateway();
+        attach(&mut gateway);
+        wire.clear();
+        gateway.set_client_size(100, 30);
+        assert_eq!(
+            wire.lines(),
+            vec!["refresh-client -C 100x30", "refresh-client -C @0:100x30"]
+        );
+        // Commands 4 and 5 are those two, answered in turn; 6 is the
+        // re-listing.
+        gateway.advance(reply(4, "").as_bytes());
+        gateway.advance(reply(5, "").as_bytes());
+        gateway.advance(b"%window-add @1\r\n");
+        gateway.advance(reply(6, "@0 %0 1 100 30 bash\n@1 %1 1 100 30 fresh").as_bytes());
+        assert_eq!(wire.lines().last().unwrap(), "refresh-client -C @1:100x30");
     }
 
     #[test]

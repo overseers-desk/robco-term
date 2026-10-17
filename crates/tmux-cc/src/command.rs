@@ -6,9 +6,9 @@
 //! is not a shell, and the closed set is what lets every reply be paired with
 //! a known question.
 //!
-//! `resize-window` is deliberately absent: a client's screen size reaches
-//! tmux through `refresh-client -C` (the client-size law in `app::channels`),
-//! and one bank geometry across every window has no use for a per-window size.
+//! `resize-window` is deliberately absent: it sizes a window for every client,
+//! while `refresh-client -C` speaks for this client alone, for its whole
+//! screen or for one window (the client-size law in `app::channels`).
 //!
 //! # Quoting, measured against tmux 3.5a's own lexer
 //!
@@ -95,10 +95,17 @@ pub enum Command {
     /// Ask tmux to let this client go. Teardown follows on `%exit`.
     DetachClient,
 
-    /// The client-size law: tell tmux how big this client's screen is. One
-    /// size speaks for every window, because every channel shares the one
-    /// bank geometry.
+    /// The client-size law: tell tmux how big this client's screen is. tmux
+    /// sizes the windows this client creates from it.
     ClientSize { columns: u16, rows: u16 },
+
+    /// This client's size for one window. tmux caps the window at it,
+    /// whichever client its `window-size` rule follows.
+    WindowSize {
+        window: WindowId,
+        columns: u16,
+        rows: u16,
+    },
 }
 
 impl Command {
@@ -170,6 +177,11 @@ impl Command {
             Command::ClientSize { columns, rows } => {
                 format!("refresh-client -C {columns}x{rows}")
             }
+            Command::WindowSize {
+                window,
+                columns,
+                rows,
+            } => format!("refresh-client -C {window}:{columns}x{rows}"),
         }
     }
 }
@@ -258,6 +270,15 @@ mod tests {
             }
             .to_wire(),
             "refresh-client -C 100x30"
+        );
+        assert_eq!(
+            Command::WindowSize {
+                window: WindowId::parse("@3").unwrap(),
+                columns: 100,
+                rows: 30
+            }
+            .to_wire(),
+            "refresh-client -C @3:100x30"
         );
     }
 

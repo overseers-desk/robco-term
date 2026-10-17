@@ -25,7 +25,11 @@
 //! other sessions at, and the surface's `set_client_size` is that law's one
 //! home. The grid is a request: tmux sizes each window from every client
 //! attached to it, and a pane's channel is drawn at the size tmux reports
-//! (`crate::tmux::GatewayEvent::PaneResized`).
+//! (`crate::tmux::GatewayEvent::PaneResized`). The request goes to every
+//! window as well as to the client, because under `window-size latest` a
+//! window shared with another client follows whichever was last active on
+//! it, and this client's `send-keys` never counts; a per-window size caps the
+//! window at the glass whichever client it follows.
 //!
 //! # One deliberate choice
 //!

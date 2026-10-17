@@ -1341,14 +1341,16 @@ fn plain_client(server: &Server) -> (usize, usize) {
         .expect("a plain client")
 }
 
-/// Pump both surfaces until every channel stands at its pane's size, or
-/// the deadline passes; answers both sides for the assertion to compare.
+/// Pump both surfaces until every channel stands at its pane's size and
+/// `until` holds of what tmux reports, or the deadline passes; answers both
+/// sides for the assertions to compare.
 type Sizes = Vec<(String, usize, usize)>;
 fn settled(
     surface: &mut TerminalSurface,
     other: &mut TerminalSurface,
     server: &Server,
     bank: u32,
+    until: impl Fn(&TerminalSurface, &Sizes) -> bool,
 ) -> (Sizes, Sizes) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -1356,20 +1358,31 @@ fn settled(
         other.pump();
         let panes = pane_sizes(server);
         let channels = channel_sizes(surface, bank, &panes);
-        if panes == channels || Instant::now() > deadline {
+        if (panes == channels && until(surface, &panes)) || Instant::now() > deadline {
             return (panes, channels);
         }
         std::thread::sleep(Duration::from_millis(15));
     }
 }
 
+/// The gateway's own row: a PTY channel, so its grid is the glass's.
+fn glass(surface: &TerminalSurface, bank: u32) -> (usize, usize) {
+    let row = surface
+        .channels()
+        .rows()
+        .iter()
+        .find(|r| r.bank == bank && r.channel == 1);
+    let grid = &row.expect("the gateway row").session.term().grid;
+    (grid.columns(), grid.screen_lines())
+}
+
 /// A plain `tmux attach` on the same session, typed in a channel of its own
 /// as the owner runs one. Under tmux's `window-size latest` a window shared
 /// by two clients follows the one last active on it, and the gateway's
-/// `send-keys` is no activity, so tmux's sizes part from the glass: a
-/// window grows to the plain client, and one the gateway asked for keeps the
-/// size it was born at. Every channel is drawn at the size tmux gave its
-/// pane, whatever the glass is.
+/// `send-keys` is no activity; the gateway's per-window size caps every
+/// window at the glass all the same, and sizes a window tmux finds no client
+/// to follow for. A window shown to a smaller client still shrinks to it.
+/// Every channel is drawn at the size tmux gave its pane.
 #[test]
 fn phase_19_with_a_second_client_on_the_session_every_channel_stands_at_its_panes_size() {
     if !have_tmux() {
@@ -1394,40 +1407,41 @@ fn phase_19_with_a_second_client_on_the_session_every_channel_stands_at_its_pane
     assert_eq!(server.clients(), 2, "the plain client attached");
 
     // A key through the plain client makes it the window's latest client,
-    // and the window grows to it, past the glass.
+    // larger than the glass; the window stays at the glass.
+    let at_glass = |s: &TerminalSurface, panes: &Sizes| {
+        panes.iter().all(|(_, w, h)| (*w, *h) == glass(s, bank))
+    };
     other.write(b"x");
-    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank, at_glass);
     assert_eq!(channels, panes);
-    let (_, width, height) = &panes[0];
-    assert_eq!(
-        (*width, *height),
-        plain_client(&server),
-        "the window followed the plain client"
-    );
+    assert!(at_glass(&surface, &panes), "{panes:?}");
 
     // A window the gateway asks for, then a glass that grows: tmux finds no
-    // latest client for the new window and leaves it as it was born.
+    // latest client for the new window, and the per-window size sizes it.
     surface.new_channel();
     pump_until(&mut surface, "the asked-for window to take the air", |s| {
         s.channels().current_channel() == 3
     });
     surface.resized(PhysicalSize::new(900, 580));
-    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank, at_glass);
     assert_eq!(channels, panes);
+    assert!(at_glass(&surface, &panes), "{panes:?}");
 
     // The plain client shrinks below the glass: the window it shows follows
     // it down, and so does that window's channel.
     other.resized(PhysicalSize::new(540, 310));
-    let (panes, channels) = settled(&mut surface, &mut other, &server, bank);
+    let shown = |s: &TerminalSurface, panes: &Sizes| {
+        let on_air = window_on_air(s);
+        let pane = panes.iter().find(|(w, _, _)| w == on_air);
+        pane.map(|(_, w, h)| (*w, *h))
+    };
+    let (panes, channels) = settled(&mut surface, &mut other, &server, bank, |s, panes| {
+        shown(s, panes) == Some(plain_client(&server))
+    });
     assert_eq!(channels, panes);
-    let shown = window_on_air(&surface).to_string();
-    let pane = panes
-        .iter()
-        .find(|(w, _, _)| *w == shown)
-        .expect("the window on the air");
     assert_eq!(
-        (pane.1, pane.2),
-        plain_client(&server),
+        shown(&surface, &panes),
+        Some(plain_client(&server)),
         "the shared window follows the smaller client"
     );
 }
