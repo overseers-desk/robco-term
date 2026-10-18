@@ -251,8 +251,8 @@ pub struct Gateway<W: Write> {
 
     /// When `%session-changed` opened the wire and the bootstrap went out
     /// (`None` until then, and nothing is written), whether anything has
-    /// answered it, and how many blocks arrived unsolicited: the watchdog's
-    /// readings (see [`BOOTSTRAP_DEADLINE`] and [`Gateway::poll`]).
+    /// answered it, and how many blocks arrived unsolicited since then: the
+    /// watchdog's readings (see [`BOOTSTRAP_DEADLINE`] and [`Gateway::poll`]).
     opened: Option<Instant>,
     solicited: bool,
     unsolicited: usize,
@@ -567,10 +567,12 @@ impl<W: Write> Gateway<W> {
                     // The attach burst: output of the commands that built the
                     // session, sent before this client asked anything
                     // (cpp:343-349). The flags gate already kept it off the
-                    // pairing queue; nothing further to do with it but count
-                    // it, because a wire that is *only* this is the shape
-                    // [`Gateway::poll`]'s watchdog watches for.
-                    self.unsolicited += 1;
+                    // pairing queue. Counted from `%session-changed` on, where
+                    // one may be an answer to this client flagged wrong: the
+                    // shape [`Gateway::poll`]'s watchdog watches for.
+                    if self.opened.is_some() {
+                        self.unsolicited += 1;
+                    }
                     // One tmux ran for itself and could not, such as an attach
                     // with no server: its text is the only word of why.
                     if block.error {
@@ -1872,6 +1874,20 @@ mod tests {
     #[test]
     fn a_silent_wire_is_not_the_watchdogs_business() {
         let (mut gateway, _wire) = gateway();
+        assert_eq!(
+            gateway.poll(Instant::now() + BOOTSTRAP_DEADLINE * 10),
+            vec![]
+        );
+        assert!(gateway.attached());
+    }
+
+    /// Nor is a tmux that attached and then hung: the attach burst's own
+    /// block comes before `%session-changed`, answering nothing this client
+    /// sent, so it says nothing about the flags.
+    #[test]
+    fn a_wire_silent_after_the_attach_burst_is_not_the_watchdogs_business() {
+        let mut gateway = Gateway::new(Wire::default());
+        gateway.advance(b"%begin 1 282 0\r\n%end 1 282 0\r\n%session-changed $0 one\r\n");
         assert_eq!(
             gateway.poll(Instant::now() + BOOTSTRAP_DEADLINE * 10),
             vec![]
