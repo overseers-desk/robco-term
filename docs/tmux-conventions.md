@@ -7,7 +7,7 @@ The peers were read at iTerm2 commit `ec4517e6` (2026-10-17) and WezTerm commit 
 | Convention | robco-term |
 |---|---|
 | Write nothing to tmux until `%session-changed` | Follows |
-| Capture as much history at attach as a scrollback holds | Departs, no reason recorded |
+| Capture as much history at attach as a scrollback holds | Follows |
 | Learn the server's dialect before sending commands that depend on it | Departs, no reason recorded |
 | Show every pane of a window | Departs, no reason recorded |
 | Say in the gateway pane how to leave control mode | Departs on purpose |
@@ -26,7 +26,7 @@ When a window is attached, its pane's earlier output is fetched with `capture-pa
 
 - iTerm2 asks for the larger of the window's height and the profile's scrollback length (`maxHistory` in `sources/tmux/TmuxController.m`).
 - WezTerm asks for tmux's own `#{history_limit}` for the window (`ListAllWindows` and `CapturePane` in `mux/src/tmux_commands.rs`).
-- robco-term asks for 1000 lines (`CAPTURE_HISTORY` in `crates/tmux-cc/src/command.rs`), the depth its earlier qmltermwidget implementation used, though the channel's own scrollback is deeper (`SessionConfig` in `crates/core/src/session.rs`). After an attach, at most 1000 lines of a pane's earlier output can be scrolled back to, however much tmux holds.
+- robco-term asks for as many lines as the channel's own scrollback holds (`Gateway::attach_window` in `crates/app/src/tmux.rs`). tmux returns no more than it holds, so the deep request costs nothing where a pane's history is short.
 
 ## Learn the server's dialect first
 
@@ -56,7 +56,7 @@ These behaviours are iTerm2's alone; WezTerm, like robco-term, has none of them.
 
 **tmux is held open after `%exit`.** iTerm2 sets tmux's `wait-exit` client flag, and after `%exit` writes the empty line that releases it (`ping` in `sources/tmux/TmuxController.m`, the `%exit` branch in `sources/tmux/TmuxGateway.m`, both for tmux 3.2 and later). On tmux 3.5a, a client that has set the flag gets no closing `ESC \` after `%exit`, and every line it writes is absorbed until an empty one ends the client. robco-term does not set the flag. A line it writes between tmux's exit and its own reading of `%exit`, such as a keystroke or a resize, reaches the shell, which runs it as a command. WezTerm does not set the flag either; it writes two newlines after every `%exit`, which with no flag set reach the shell as two empty command lines.
 
-**tmux's reason for leaving is shown.** iTerm2 prints `tmux failed with error: “…”` when the attach itself fails (`sources/PTYSession/PTYSession.m`), and `tmux exited unexpectedly.` with the line when `%exit` carries a reason (`sources/tmux/TmuxGateway.m`). robco-term shows neither: a failed attach leaves the shell's prompt and nothing else, and the message tmux sent, such as `no sessions`, is not logged either.
+**tmux's reason for leaving is shown.** iTerm2 prints `tmux failed with error: “…”` when the attach itself fails (`sources/PTYSession/PTYSession.m`), and `tmux exited unexpectedly.` with the line when `%exit` carries a reason (`sources/tmux/TmuxGateway.m`). robco-term shows neither on screen: a failed attach leaves the shell's prompt and nothing else. It logs both at warn: the message a failed attach sends, such as `no sessions`, and the reason `%exit` carries, such as `server exited unexpectedly`.
 
 **Panes that fall behind are paused.** With its pause mode enabled in settings, iTerm2 sets tmux's `pause-after` flag and resumes paused panes itself (`enablePauseModeIfPossible` in `sources/tmux/TmuxController.m`).
 
