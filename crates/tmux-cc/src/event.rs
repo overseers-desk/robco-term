@@ -66,15 +66,15 @@ impl Block {
     /// Whether tmux marked this block as the answer to a command the client
     /// sent.
     ///
-    /// **Observed, not documented.** `man tmux` says of the guards' third
-    /// field only "flags (currently not used)". tmux 3.5a uses it: every block
-    /// of the attach burst carries `0` and every block answering a command
-    /// from this client's stdin carries `1`
-    /// (`tests/transcripts/01-fresh-session.txt` and every other recording).
-    /// The codec uses it as the gate on its pairing queue, which is how it
-    /// needs no bootstrap delay: without this flag, a client cannot tell the
-    /// attach burst from a real reply and has no choice but to wait 300 ms or
-    /// for `%session-changed` before daring to send its first command.
+    /// **Undocumented.** `man tmux` says of the guards' third field only
+    /// "flags (currently not used)". tmux sets it by the command's origin,
+    /// `1` for one a control client sent (`cmdq_guard(item, "begin", flags)`
+    /// in `cmd-queue.c`, since 2.9 at least): every block of the attach burst
+    /// carries `0` and every block answering a command from this client's
+    /// stdin carries `1` (`tests/transcripts/01-fresh-session.txt` and every
+    /// other recording). The codec uses it as the gate on its pairing queue,
+    /// so a block tmux sends unasked can never take the reply slot of a
+    /// command the client queued.
     pub fn solicited(&self) -> bool {
         self.flags.is_some_and(|flags| flags & 1 != 0)
     }
