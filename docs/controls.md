@@ -198,13 +198,14 @@ history behind it, so there the same keys are the program's own.
 
 ## On an attachment
 
-A channel attached to a tmux server through control mode is a picture to
-read and copy from rather than a surface to type at, because that channel's
-pty carries the protocol itself. Every key is dropped there, except `Enter`,
-which detaches the client: a channel you typed `tmux -CC` in comes home, and
-one the terminal started for a session it found closes. Typing `tmux -CC` at
-a session that already has a bank opens a second one; tmux allows a second
-client and the terminal does not refuse it.
+A tmux bank's gateway, the channel `tmux -CC` was typed in or one the
+terminal started for a session it found, is a picture to read and copy from
+rather than a surface to type at, because its pty carries the control-mode
+protocol itself. Every key is dropped there, except `Enter`, which detaches
+the client: a gateway you typed `tmux -CC` in comes home, and one the
+terminal started closes. Typing `tmux -CC` at a session that already has a
+bank opens a second one; tmux allows a second client and the terminal does
+not refuse it.
 
 Each tmux window gets one channel, and a window split into panes shows
 only its active pane there; the others are not drawn. Keys typed at that
