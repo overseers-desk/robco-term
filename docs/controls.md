@@ -206,6 +206,15 @@ one the terminal started for a session it found closes. Typing `tmux -CC` at
 a session that already has a bank opens a second one; tmux allows a second
 client and the terminal does not refuse it.
 
+Each tmux window gets one channel, and a window split into panes shows
+only its active pane there; the others are not drawn. Keys typed at that
+channel reach the pane through tmux's `send-keys`, which skips tmux's own
+key bindings, so the prefix chords for moving between panes, `Ctrl`+`B`
+then `o` or an arrow, arrive at the program in the pane and change nothing
+in tmux. What moves the channel to another pane is a change made elsewhere,
+such as `tmux select-pane` or another tmux client: the channel follows,
+showing the new active pane in the same place.
+
 `Ctrl`+`Shift`+`B` folds the bank away and the well takes the whole
 window, the cabinet standing around it; the same chord brings the bank back
 at its configured width. It is this window's state and not a setting: a
