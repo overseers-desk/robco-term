@@ -561,6 +561,11 @@ impl<W: Write> Gateway<W> {
                     // it, because a wire that is *only* this is the shape
                     // [`Gateway::poll`]'s watchdog watches for.
                     self.unsolicited += 1;
+                    // One tmux ran for itself and could not, such as an attach
+                    // with no server: its text is the only word of why.
+                    if block.error {
+                        log::warn!("tmux: {}", block.text().join(" "));
+                    }
                     log::debug!(
                         "tmux: unsolicited block {:?} of {} line(s)",
                         block.number,
@@ -1150,6 +1155,18 @@ mod tests {
         gateway.advance(b"%begin 1 274 0\r\nno sessions\r\n%error 1 274 0\r\n%exit\r\n");
         gateway.poll(Instant::now());
         assert_eq!(wire.lines(), Vec::<String>::new());
+    }
+
+    /// The same burst's error block answers nothing this client sent, and
+    /// its text is the only account of why the attach failed.
+    #[test]
+    fn an_attach_that_fails_logs_what_tmux_said() {
+        init_logger();
+        let from = messages().lock().unwrap().len();
+        let mut gateway = Gateway::new(Wire::default());
+        gateway.advance(b"%begin 1 274 0\r\nno sessions\r\n%error 1 274 0\r\n%exit\r\n");
+        let said = messages().lock().unwrap()[from..].join("\n");
+        assert!(said.contains("tmux: no sessions"), "it said: {said:?}");
     }
 
     /// The listing the surface banks from: every session the server holds,
