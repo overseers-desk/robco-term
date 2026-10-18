@@ -399,6 +399,12 @@ impl<W: Write> Gateway<W> {
         self.command(&Command::KillWindow(window.clone()), Intent::Ignore);
     }
 
+    /// Ask tmux to step a window to its next pane; the channel follows when
+    /// `%window-pane-changed` lands.
+    pub fn next_pane(&mut self, window: &WindowId) {
+        self.command(&Command::NextPane(window.clone()), Intent::Ignore);
+    }
+
     /// Ask tmux to let this client go; teardown follows on `%exit`.
     pub fn detach(&mut self) {
         self.command(&Command::DetachClient, Intent::Ignore);

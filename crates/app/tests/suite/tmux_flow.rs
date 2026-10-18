@@ -1475,3 +1475,37 @@ fn phase_20_an_attach_that_never_happens_hands_the_shell_nothing() {
     let after: Vec<&str> = glass[1..3].iter().map(|l| l.trim_end()).collect();
     assert_eq!(after, [prompt.as_str(), ""], "{glass:?}");
 }
+
+/// A split window's channel shows its active pane, and `Ctrl+Shift+O` steps
+/// tmux to the window's next pane, as `C-b o` would: tmux's active pane
+/// moves, and the channel follows it.
+#[test]
+fn phase_21_the_pane_chord_steps_a_split_window_to_its_next_pane() {
+    if !have_tmux() {
+        return;
+    }
+    let server = Server::start();
+    server.run(&["split-window", "-t", "one"]);
+    let active = || {
+        let pane = server.run(&["display-message", "-p", "-t", "one", "#{pane_id}"]);
+        pane.trim().to_string()
+    };
+    let before = active();
+    let mut surface = surface();
+    attach(&mut surface, &server);
+    let shown = |s: &TerminalSurface| {
+        let (_, pane) = s.channels().current()?.tmux.clone()?;
+        Some(pane.to_string())
+    };
+    // The window's channel is on the air; were it not, the chord would
+    // decline and the wait below would time out naming every row.
+    let (o, ctrl_shift) = (
+        Key::Character("O".into()),
+        ModifiersState::CONTROL | ModifiersState::SHIFT,
+    );
+    press(&mut surface, o, Some("\u{f}"), ctrl_shift);
+    pump_until(&mut surface, "the channel to follow tmux", |s| {
+        shown(s).is_some_and(|pane| pane != before)
+    });
+    assert_eq!(shown(&surface), Some(active()));
+}

@@ -90,6 +90,10 @@ pub enum Command {
     /// not here.
     KillWindow(WindowId),
 
+    /// Make a window's next pane its active one, wrapping after the last, as
+    /// tmux's own `C-b o` does.
+    NextPane(WindowId),
+
     /// Ask tmux to let this client go. Teardown follows on `%exit`.
     DetachClient,
 
@@ -163,6 +167,7 @@ impl Command {
             }
             Command::NewWindow => "new-window".to_string(),
             Command::KillWindow(window) => format!("kill-window -t {window}"),
+            Command::NextPane(window) => format!("select-pane -t {window}.+"),
             Command::DetachClient => "detach-client".to_string(),
             Command::ClientSize { columns, rows } => {
                 format!("refresh-client -C {columns}x{rows}")
@@ -256,6 +261,10 @@ mod tests {
         assert_eq!(
             Command::KillWindow(WindowId::parse("@7").unwrap()).to_wire(),
             "kill-window -t @7"
+        );
+        assert_eq!(
+            Command::NextPane(WindowId::parse("@7").unwrap()).to_wire(),
+            "select-pane -t @7.+"
         );
         assert_eq!(
             Command::ClientSize {

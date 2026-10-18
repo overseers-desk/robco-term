@@ -36,6 +36,7 @@ pub enum Action {
     Paste,
     OpenFind,
     FoldBank,
+    NextPane,
     NewWindow,
     CloseWindow,
 }
@@ -57,6 +58,7 @@ const ACTIONS: &[(Action, &str)] = &[
     (Action::Paste, "paste"),
     (Action::OpenFind, "open_find"),
     (Action::FoldBank, "fold_bank"),
+    (Action::NextPane, "next_pane"),
     (Action::NewWindow, "new_window"),
     (Action::CloseWindow, "close_window"),
 ];
@@ -131,6 +133,7 @@ const SHIPPED: &[(&str, &str, Action)] = &[
     ("v", "ctrl | shift", Action::Paste),
     ("f", "ctrl | shift", Action::OpenFind),
     ("b", "ctrl | shift", Action::FoldBank),
+    ("o", "ctrl | shift", Action::NextPane),
     ("n", "ctrl | shift", Action::NewWindow),
     ("q", "ctrl | shift", Action::CloseWindow),
 ];
@@ -375,6 +378,7 @@ mod tests {
         let shipped = Bindings::shipped();
         assert_eq!(shipped.lookup(&character("B"), CTRL_SHIFT), Some(&Bound::Action(Action::FoldBank)));
         assert_eq!(shipped.lookup(&character("t"), CTRL_SHIFT), Some(&Bound::Action(Action::NewChannel)));
+        assert_eq!(shipped.lookup(&character("O"), CTRL_SHIFT), Some(&Bound::Action(Action::NextPane)));
         assert_eq!(
             shipped.lookup(&Key::Named(NamedKey::PageUp), ModifiersState::CONTROL),
             Some(&Bound::Action(Action::PrevChannel))

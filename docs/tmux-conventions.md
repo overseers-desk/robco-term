@@ -9,7 +9,7 @@ The peers were read at iTerm2 commit `ec4517e6` (2026-10-17) and WezTerm commit 
 | Write nothing to tmux until `%session-changed` | Follows |
 | Capture as much history at attach as a scrollback holds | Follows |
 | Learn the server's dialect before sending commands that depend on it | Departs on purpose |
-| Show every pane of a window | Departs, no reason recorded |
+| Show every pane of a window | Departs on purpose |
 | Say in the gateway pane how to leave control mode | Departs on purpose |
 
 ## Write nothing until `%session-changed`
@@ -40,7 +40,7 @@ tmux's command syntax has changed across releases. The commands robco-term sends
 
 - iTerm2 draws a window's panes as native split panes, built from tmux's layout (`sources/tmux/TmuxWindowOpener.m`, `sources/tmux/TmuxLayoutParser.m`).
 - WezTerm builds split panes from each pane's position and size (`ListAllPanes` in `mux/src/tmux_commands.rs`).
-- robco-term gives a window one channel, which shows the window's active pane only (`Intent::ListPanes` and `Intent::LayoutPanes` in `crates/app/src/tmux.rs`). Typed keys reach that pane through `send-keys`, which bypasses tmux's key bindings: on tmux 3.5a, `send-keys -H` of `C-b o` leaves the active pane where it was. The other panes of a split window therefore cannot be reached from the keyboard. robco-term has no split view anywhere, so following this convention means designing one.
+- robco-term has no split view anywhere. By design, a window gets one channel, which shows one pane at a time, the window's active pane (`Intent::ListPanes` and `Intent::LayoutPanes` in `crates/app/src/tmux.rs`). `Ctrl`+`Shift`+`O` steps the window to its next pane with `select-pane -t @N.+`, and the channel follows. tmux's own prefix chords do nothing there, because typed keys reach the pane through `send-keys`, which bypasses tmux's key bindings: on tmux 3.5a, `send-keys -H` of `C-b o` leaves the active pane where it was.
 
 ## Say how to leave control mode
 

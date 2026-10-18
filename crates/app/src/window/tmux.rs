@@ -465,6 +465,25 @@ impl TerminalSurface {
         true
     }
 
+    /// `Ctrl+Shift+O`: the tmux window on the air steps to its next pane, as
+    /// tmux's own `C-b o` would, and its channel follows when tmux says the
+    /// active pane changed. Anywhere else the chord declines and the key
+    /// reaches the program.
+    pub(super) fn next_pane(&mut self) -> bool {
+        let Some((bank, (window, _))) = self
+            .channels
+            .current()
+            .and_then(|row| Some((row.bank, row.tmux.clone()?)))
+        else {
+            return false;
+        };
+        let Some(gateway) = self.gateway_mut(bank) else {
+            return false;
+        };
+        gateway.next_pane(&window);
+        true
+    }
+
     /// A bank's tmux client, for the keys and the closes that command it.
     pub(super) fn gateway_mut(
         &mut self,

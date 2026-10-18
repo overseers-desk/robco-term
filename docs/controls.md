@@ -26,6 +26,7 @@ so the same bindings are typed there by pressing `Esc` and then the key.
 | `Ctrl`+`Shift`+`Left` / `Right` | Move the channel on screen one slot |
 | `Alt`+`PageUp` / `PageDown` | Page the bank |
 | `Ctrl`+`Shift`+`B` | Fold the bank away, or bring it back |
+| `Ctrl`+`Shift`+`O` | On a tmux window, step to its next pane |
 
 The digit `0` on its own means channel 10. Digits are typed one at a time,
 and the chord fires the moment no longer slot number could still match what
@@ -212,9 +213,11 @@ only its active pane there; the others are not drawn. Keys typed at that
 channel reach the pane through tmux's `send-keys`, which skips tmux's own
 key bindings, so the prefix chords for moving between panes, `Ctrl`+`B`
 then `o` or an arrow, arrive at the program in the pane and change nothing
-in tmux. What moves the channel to another pane is a change made elsewhere,
-such as `tmux select-pane` or another tmux client: the channel follows,
-showing the new active pane in the same place.
+in tmux. `Ctrl`+`Shift`+`O` steps the window to its next pane instead,
+wrapping after the last, and the channel follows, showing the new active
+pane in the same place. It follows the same way when the active pane
+changes elsewhere, such as through `tmux select-pane` or another tmux
+client.
 
 `Ctrl`+`Shift`+`B` folds the bank away and the well takes the whole
 window, the cabinet standing around it; the same chord brings the bank back

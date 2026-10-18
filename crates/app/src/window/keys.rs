@@ -261,6 +261,7 @@ impl TerminalSurface {
                 true
             }
             Action::FoldBank => self.toggle_bank_fold(),
+            Action::NextPane => self.next_pane(),
             Action::NewWindow => self.ask_shell(ShellEvent::NewWindow(NewWindow {
                 fullscreen: false,
                 ssh: None,
