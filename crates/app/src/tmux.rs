@@ -914,7 +914,13 @@ impl<W: Write> Gateway<W> {
                 "tmux: malformed {name}: {:?}",
                 String::from_utf8_lossy(&rest)
             ),
-            Notification::Exit { .. } => self.teardown(false, out),
+            // No reason on a detach or an orderly shutdown; one on a crash.
+            Notification::Exit { reason } => {
+                if let Some(reason) = reason {
+                    log::warn!("tmux: %exit {reason}");
+                }
+                self.teardown(false, out);
+            }
             // The first `%session-changed` ends the attach burst: tmux attached
             // rather than ran one command and left, so the wire opens and the
             // bootstrap goes out. A later one is `switch-client`, and this
@@ -1409,6 +1415,17 @@ mod tests {
             }]
         );
         assert!(!first.attached());
+
+        init_logger();
+        let from = messages().lock().unwrap().len();
+        let (mut ended, _wire) = gateway();
+        ended.advance(b"%exit server exited unexpectedly\r\n");
+        let said = messages().lock().unwrap()[from..].join("\n");
+        assert!(
+            said.contains("tmux: %exit server exited unexpectedly"),
+            "it said: {said:?}"
+        );
+        assert!(!ended.attached());
 
         let (mut second, _wire) = gateway();
         attach(&mut second);
