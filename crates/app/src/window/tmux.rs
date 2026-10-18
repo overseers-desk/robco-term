@@ -296,7 +296,7 @@ impl TerminalSurface {
                                 )))
                             });
                     if opened {
-                        gateway.attach_window(&window, &pane);
+                        gateway.attach_window(&window, &pane, scrollback);
                     } else {
                         // A window added with no free slot to take it stays
                         // channelless: tmux keeps it, but nothing here draws

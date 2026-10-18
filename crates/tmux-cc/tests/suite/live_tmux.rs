@@ -84,7 +84,10 @@ fn the_whole_command_set_is_a_dialect_tmux_speaks() {
         Command::ListPanes,
         Command::ListWindows,
         Command::ListWindowPanes(WindowId::parse("@0").unwrap()),
-        Command::capture_pane(&pane),
+        Command::CapturePane {
+            pane: pane.clone(),
+            history: 1000,
+        },
         Command::CursorPosition(pane.clone()),
         Command::ClientSize {
             columns: 100,

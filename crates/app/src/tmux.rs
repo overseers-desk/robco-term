@@ -130,6 +130,8 @@ struct PaneGate {
     captured: bool,
     bootstrapped: bool,
     backlog: Vec<u8>,
+    /// The channel's scrollback: how many lines above the screen a capture asks for.
+    history: usize,
 }
 
 /// What the surface must act on. Each variant names the `channels` transition
@@ -507,17 +509,25 @@ impl<W: Write> Gateway<W> {
 
     /// Route a window's active pane into a channel: register its gate and ask
     /// for its screen and cursor. The surface calls this after
-    /// `open_tmux_window` granted the slot; a window refused a channel is
-    /// never attached.
-    pub fn attach_window(&mut self, window: &WindowId, pane: &PaneId) {
+    /// `open_tmux_window` granted the slot, with that channel's scrollback; a
+    /// window refused a channel is never attached.
+    pub fn attach_window(&mut self, window: &WindowId, pane: &PaneId, history: usize) {
         // A re-attach replaces the wiring, never doubles it.
         self.panes.remove(pane);
-        self.panes.insert(pane.clone(), PaneGate::default());
+        let gate = PaneGate {
+            history,
+            ..PaneGate::default()
+        };
+        self.panes.insert(pane.clone(), gate);
         self.windows.insert(window.clone(), pane.clone());
         // What the pane already holds, then where its cursor stands in it.
         // Both asked now so the pane's live output has a definite boundary to
         // be dropped before and kept after.
-        self.command(&Command::capture_pane(pane), Intent::Capture(pane.clone()));
+        let capture = Command::CapturePane {
+            pane: pane.clone(),
+            history,
+        };
+        self.command(&capture, Intent::Capture(pane.clone()));
         self.command(
             &Command::CursorPosition(pane.clone()),
             Intent::Cursor(pane.clone()),
@@ -838,16 +848,18 @@ impl<W: Write> Gateway<W> {
         if previous.as_ref() == Some(&pane) {
             return;
         }
-        let was_attached = previous
+        // The new pane goes on the old one's channel, so at its depth.
+        let history = previous
             .as_ref()
-            .is_some_and(|p| self.panes.remove(p).is_some());
+            .and_then(|p| self.panes.remove(p))
+            .map(|gate| gate.history);
         self.windows.insert(window.clone(), pane.clone());
         out.push(GatewayEvent::WindowPaneChanged {
             window: window.clone(),
             pane: pane.clone(),
         });
-        if was_attached {
-            self.attach_window(window, &pane);
+        if let Some(history) = history {
+            self.attach_window(window, &pane, history);
         }
     }
 
@@ -1287,8 +1299,9 @@ mod tests {
         let window = WindowId::parse("@0").unwrap();
         let pane = PaneId::parse("%0").unwrap();
         wire.clear();
-        gateway.attach_window(&window, &pane);
+        gateway.attach_window(&window, &pane, 10_000);
         assert_eq!(wire.lines().len(), 2, "capture and cursor, together");
+        assert_eq!(wire.lines()[0], "capture-pane -peqJ -t %0 -S -10000");
 
         // Before the capture lands, %output is dropped: the capture on its
         // way holds those same bytes.
@@ -1391,7 +1404,7 @@ mod tests {
         let (mut gateway, _wire) = gateway();
         attach(&mut gateway);
         let pane = PaneId::parse("%0").unwrap();
-        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane);
+        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane, 1000);
         let events = gateway.advance(b"%unlinked-window-close @0\r\n");
         assert_eq!(
             events,
@@ -1486,7 +1499,7 @@ mod tests {
         let (mut gateway, wire) = gateway();
         attach(&mut gateway);
         let window = WindowId::parse("@0").unwrap();
-        gateway.attach_window(&window, &PaneId::parse("%0").unwrap());
+        gateway.attach_window(&window, &PaneId::parse("%0").unwrap(), 5000);
         // Finish %0's bootstrap so the switch is from a live pane.
         gateway.advance(reply(4, "old").as_bytes());
         gateway.advance(reply(5, "0 0 24").as_bytes());
@@ -1500,9 +1513,10 @@ mod tests {
                 pane: PaneId::parse("%5").unwrap(),
             }]
         );
-        // A fresh capture-and-cursor pair went out for the new pane...
+        // A fresh capture-and-cursor pair went out for the new pane, as deep
+        // as the channel it lands on...
         assert_eq!(wire.lines().len(), 2);
-        assert!(wire.lines()[0].contains("-t %5"));
+        assert_eq!(wire.lines()[0], "capture-pane -peqJ -t %5 -S -5000");
         // ...the old pane is deaf, and the new one gated until it lands.
         assert_eq!(gateway.advance(b"%output %0 stale\r\n"), vec![]);
         assert_eq!(gateway.advance(b"%output %5 early\r\n"), vec![]);
@@ -1513,7 +1527,7 @@ mod tests {
         let (mut gateway, _wire) = gateway();
         attach(&mut gateway);
         let pane = PaneId::parse("%0").unwrap();
-        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane);
+        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane, 1000);
         // Both replies error (command 4, 5): the pane must not stay deaf.
         let err = "%begin 1 104 1\r\nno such pane\r\n%error 1 104 1\r\n";
         gateway.advance(err.as_bytes());
@@ -1541,7 +1555,7 @@ mod tests {
         let (mut gateway, _wire) = gateway();
         attach(&mut gateway);
         let pane = PaneId::parse("%0").unwrap();
-        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane);
+        gateway.attach_window(&WindowId::parse("@0").unwrap(), &pane, 1000);
 
         // The capture (command 4) errors...
         let err = "%begin 1 104 1\r\nno such pane\r\n%error 1 104 1\r\n";
@@ -1727,7 +1741,7 @@ mod tests {
         attach(&mut gateway);
         let window = WindowId::parse("@0").unwrap();
         let pane = PaneId::parse("%0").unwrap();
-        gateway.attach_window(&window, &pane);
+        gateway.attach_window(&window, &pane, 1000);
         // The capture (command 4) comes back; the cursor never will.
         let events = gateway.advance(reply(4, "the screen").as_bytes());
         assert!(

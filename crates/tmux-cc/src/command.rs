@@ -39,9 +39,6 @@ use crate::ids::{PaneId, WindowId};
 /// One command per chunk keeps a large paste from building one huge line.
 pub const SEND_KEYS_CHUNK: usize = 256;
 
-/// The scrollback `capture-pane` asks for.
-pub const CAPTURE_HISTORY: u32 = 1000;
-
 /// One line of the control protocol, going out.
 ///
 /// Every variant is exactly one wire line and therefore exactly one reply
@@ -71,9 +68,10 @@ pub enum Command {
     /// `%layout-change` re-query.
     ListWindowPanes(WindowId),
 
-    /// A pane's screen and scrollback. `-p` to stdout, `-e` with escape
-    /// sequences, `-q` quiet, `-J` joining wrapped lines.
-    CapturePane { pane: PaneId, history: u32 },
+    /// A pane's screen and up to `history` lines of scrollback above it.
+    /// `-p` to stdout, `-e` with escape sequences, `-q` quiet, `-J` joining
+    /// wrapped lines.
+    CapturePane { pane: PaneId, history: usize },
 
     /// Where that pane's cursor stands, and how tall the pane is. The height
     /// is asked for because a capture ends on the pane's bottom row, so the
@@ -122,14 +120,6 @@ impl Command {
                 bytes: chunk.to_vec(),
             })
             .collect()
-    }
-
-    /// A capture with the standard scrollback depth.
-    pub fn capture_pane(pane: &PaneId) -> Command {
-        Command::CapturePane {
-            pane: pane.clone(),
-            history: CAPTURE_HISTORY,
-        }
     }
 
     /// The command as tmux reads it, without its terminating newline.
@@ -244,10 +234,14 @@ mod tests {
     }
 
     #[test]
-    fn the_attach_pair_carries_the_references_flags_and_depth() {
+    fn the_attach_pair_carries_the_references_flags_and_the_callers_depth() {
         assert_eq!(
-            Command::capture_pane(&pane("%5")).to_wire(),
-            "capture-pane -peqJ -t %5 -S -1000"
+            Command::CapturePane {
+                pane: pane("%5"),
+                history: 10_000
+            }
+            .to_wire(),
+            "capture-pane -peqJ -t %5 -S -10000"
         );
         assert_eq!(
             Command::CursorPosition(pane("%5")).to_wire(),
