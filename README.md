@@ -45,7 +45,8 @@ a slot. `Ctrl`+`Shift`+`T` opens a new one. Switching channels degausses, the
 way changing input on real hardware did.
 
 **tmux as channels.** Type `tmux -CC` in any channel, on this machine or
-over ssh. The terminal notices tmux's control mode, and the session you
+over ssh, with tmux 3.3 or later on the server; hyperlinks in a tmux window
+need tmux 3.4. The terminal notices tmux's control mode, and the session you
 attached arrives as a bank of channels of its own: the channel you typed in
 becomes its gateway and stops taking keystrokes, the session's windows fill
 the slots after it, and they are switched with the same chords as any other.

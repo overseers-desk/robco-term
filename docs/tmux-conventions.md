@@ -8,7 +8,7 @@ The peers were read at iTerm2 commit `ec4517e6` (2026-10-17) and WezTerm commit 
 |---|---|
 | Write nothing to tmux until `%session-changed` | Follows |
 | Capture as much history at attach as a scrollback holds | Follows |
-| Learn the server's dialect before sending commands that depend on it | Departs, no reason recorded |
+| Learn the server's dialect before sending commands that depend on it | Departs on purpose |
 | Show every pane of a window | Departs, no reason recorded |
 | Say in the gateway pane how to leave control mode | Departs on purpose |
 
@@ -30,11 +30,11 @@ When a window is attached, its pane's earlier output is fetched with `capture-pa
 
 ## Learn the server's dialect first
 
-tmux's command syntax has changed across releases. The commands robco-term sends are the ones tmux 3.5a accepts.
+tmux's command syntax has changed across releases. The commands robco-term sends are the ones tmux 3.3 and later accept.
 
 - iTerm2 asks for `#{version}` and gates individual features on it: `send-keys -H` from tmux 3.0a (`serverSupportsLiteralByteInjection` in `sources/tmux/TmuxGateway.m`) and per-window sizes (`canPinWindowSizes` in `sources/tmux/TmuxController.m`), among others.
 - WezTerm sends `list-commands` first and picks the `refresh-client -C` syntax from the usage text it returns (`ListCommands` and `Resize` in `mux/src/tmux_commands.rs`). It uses what it learns for sizing only, and sends `send-keys -H` to every server.
-- robco-term asks neither, and no minimum tmux version is stated anywhere in the project. tmux accepts `refresh-client -C @window:WxH` from 3.3, so on 3.2 and older every per-window size robco-term sends fails and is logged as a failed command. `send-keys -H` exists from 3.0a, so on older servers nothing typed in robco-term reaches a pane, as in WezTerm.
+- robco-term asks neither and checks no version: it supports tmux 3.3 and later. Older servers are out of scope because tmux accepts `refresh-client -C @window:WxH` from 3.3, so on 3.2 and older every per-window size robco-term sends fails and is logged as a failed command. `send-keys -H` exists from 3.0a, so on older servers nothing typed in robco-term reaches a pane, as in WezTerm. Hyperlinks in a tmux window need tmux 3.4, the first release with OSC 8 support.
 
 ## Show every pane of a window
 
