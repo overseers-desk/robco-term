@@ -567,14 +567,14 @@ impl<W: Write> Gateway<W> {
                     // The attach burst: output of the commands that built the
                     // session, sent before this client asked anything
                     // (cpp:343-349). The flags gate already kept it off the
-                    // pairing queue. Counted from `%session-changed` on, where
-                    // one may be an answer to this client flagged wrong: the
-                    // shape [`Gateway::poll`]'s watchdog watches for.
+                    // pairing queue. Counted only once the wire is open, when
+                    // one may be an answer to this client that tmux flagged
+                    // wrong: the shape [`Gateway::poll`]'s watchdog watches for.
                     if self.opened.is_some() {
                         self.unsolicited += 1;
                     }
-                    // One tmux ran for itself and could not, such as an attach
-                    // with no server: its text is the only word of why.
+                    // An error block of tmux's own, such as an attach with no
+                    // server: its text is the only word of why.
                     if block.error {
                         log::warn!("tmux: {}", block.text().join(" "));
                     }
