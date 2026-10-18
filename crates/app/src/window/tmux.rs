@@ -3,7 +3,7 @@
 //!
 //! It all runs synchronously, on every pump. By the time [`TerminalSurface`]
 //! has attached, the model is already wired to the gateway whose bootstrap is
-//! in flight, so no late attachment can race it.
+//! queued, so no late attachment can race it.
 //!
 //! The protocol is [`crate::tmux::Gateway`]'s and the slot arithmetic is
 //! [`crate::channels`]'s; what is here is the wiring between them.

@@ -1446,3 +1446,32 @@ fn phase_19_with_a_second_client_on_the_session_every_channel_stands_at_its_pane
         "the shared window follows the smaller client"
     );
 }
+
+/// A `tmux -CC attach` with no server to attach to: tmux exits without
+/// `%session-changed`, so the gateway writes nothing for the shell to run.
+#[test]
+fn phase_20_an_attach_that_never_happens_hands_the_shell_nothing() {
+    if !have_tmux() {
+        return;
+    }
+    let dir = tempfile::tempdir().expect("scratch dir");
+    let mut surface = surface();
+    pump_until(&mut surface, "the prompt", |s| {
+        !s.viewport_text()[0].is_empty()
+    });
+    let prompt = surface.viewport_text()[0].trim_end().to_string();
+    let socket = dir.path().join("socket");
+    surface.write(format!("{TMUX} -S {} -CC attach\r", socket.display()).as_bytes());
+    // Half a second is ample for a stray line to be echoed and run.
+    let typed = Instant::now();
+    pump_until(&mut surface, "the prompt again", |s| {
+        let back = s.viewport_text()[1..]
+            .iter()
+            .any(|l| l.trim_end() == prompt);
+        back && typed.elapsed() > Duration::from_millis(500)
+    });
+    // Under the typed line: the prompt, and nothing the shell ran.
+    let glass = surface.viewport_text();
+    let after: Vec<&str> = glass[1..3].iter().map(|l| l.trim_end()).collect();
+    assert_eq!(after, [prompt.as_str(), ""], "{glass:?}");
+}

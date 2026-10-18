@@ -17,9 +17,9 @@
 //! * the transport's write side: a handle onto the PTY that carries the
 //!   control session (`term::Session::control_mode_writer`), plus the queue of what
 //!   that handle would not take yet ([`Gateway::flush`]). Commands go out the
-//!   moment policy decides, as far as the transport allows; the read side
-//!   stays the session's, arriving here as peeled body bytes through
-//!   [`Gateway::advance`];
+//!   moment policy decides, from `%session-changed` on and as far as the
+//!   transport allows; the read side stays the session's, arriving here as
+//!   peeled body bytes through [`Gateway::advance`];
 //! * the window/pane books: known windows and their active panes (the diff
 //!   base for `%window-add` re-listings), last-announced names (the rename
 //!   sweep's diff base), and each attached pane's bootstrap gate.
@@ -34,13 +34,15 @@
 //!   apart from replies without any wire signal would need either a quiet
 //!   period assumed safe or a hard wait before the first command goes out.
 //!   tmux 3.5a marks the difference on the wire instead, the `%begin` flags
-//!   field ([`tmux_cc::Block::solicited`]), so the codec discriminates and
-//!   the bootstrap goes out at construction, deterministically.
+//!   field ([`tmux_cc::Block::solicited`]), so the codec discriminates.
 //!   [`BOOTSTRAP_DEADLINE`] covers the one case that buys nothing from this:
 //!   a tmux that flagged nothing solicited would leave every reply on the
 //!   unsolicited path and the bootstrap unanswered forever, so a deadline
 //!   measured at [`Gateway::poll`] names that shape and gives the attachment
-//!   up.
+//!   up. When to send at all is another wire signal's, `%session-changed`, as
+//!   in iTerm2 (`TmuxGateway.m`) and WezTerm (`mux/src/tmux.rs`): a `tmux -CC`
+//!   that never attaches (a failed attach, `tmux -CC ls`) exits without one,
+//!   and the shell it leaves behind runs whatever is written next.
 //! * **The transport is queued, not assumed.** The PTY master this writes to
 //!   is `O_NONBLOCK` (`teletypewriter` sets it, and the `dup` behind
 //!   `control_mode_writer` shares the file-status flags), so a write under
@@ -65,8 +67,8 @@ use tmux_cc::{Codec, Command, CommandId, Event, Notification, PaneId, SessionId,
 const RESIZE_DEBOUNCE: Duration = Duration::from_millis(150);
 
 /// How long the bootstrap may go unanswered while the wire is plainly alive
-/// before the attachment is given up. Generous on purpose: the two commands
-/// go out at construction and a healthy tmux answers them in milliseconds, so
+/// before the attachment is given up. Generous on purpose: it goes out on
+/// `%session-changed` and a healthy tmux answers it in milliseconds, so
 /// anything within this window is a loaded machine and anything past it is a
 /// peer that is never going to answer.
 const BOOTSTRAP_DEADLINE: Duration = Duration::from_secs(10);
@@ -245,10 +247,11 @@ pub struct Gateway<W: Write> {
     wanted_size: Option<(u16, u16)>,
     resize_due: Option<Instant>,
 
-    /// When the bootstrap went out, whether anything has answered it, and how
-    /// many blocks arrived unsolicited meanwhile: the watchdog's three
+    /// When `%session-changed` opened the wire and the bootstrap went out
+    /// (`None` until then, and nothing is written), whether anything has
+    /// answered it, and how many blocks arrived unsolicited: the watchdog's
     /// readings (see [`BOOTSTRAP_DEADLINE`] and [`Gateway::poll`]).
-    opened: Instant,
+    opened: Option<Instant>,
     solicited: bool,
     unsolicited: usize,
     /// How many commands have been refused because [`PENDING_CAP`] was reached.
@@ -257,8 +260,9 @@ pub struct Gateway<W: Write> {
 }
 
 impl<W: Write> Gateway<W> {
-    /// Raise the client and send the bootstrap at once: the server, the attached
-    /// session's panes, the server's sessions. No timer; see the module doc.
+    /// Raise the client and queue the bootstrap: the server, the attached
+    /// session's panes, the server's sessions. It leaves on `%session-changed`,
+    /// not on a timer; see the module doc.
     pub fn new(writer: W) -> Self {
         let mut gateway = Self {
             codec: Codec::new(),
@@ -278,7 +282,7 @@ impl<W: Write> Gateway<W> {
             sent_size: None,
             wanted_size: None,
             resize_due: None,
-            opened: Instant::now(),
+            opened: None,
             solicited: false,
             unsolicited: 0,
             sheds: 0,
@@ -346,7 +350,8 @@ impl<W: Write> Gateway<W> {
         self.flush();
     }
 
-    /// Push the queue at the transport, keeping whatever it refuses.
+    /// Push the queue at the transport, keeping whatever it refuses, and all
+    /// of it until the wire has opened ([`Self::opened`]).
     ///
     /// The surface calls this once per pump (through [`Self::poll`]), which is
     /// what drains a queue that grew while the PTY was full: nothing else wakes
@@ -355,7 +360,7 @@ impl<W: Write> Gateway<W> {
     /// gone, which the gateway's own EOF path is already collapsing the bank
     /// for, so there is nothing to do but say what went down with it.
     pub fn flush(&mut self) {
-        while !self.pending.is_empty() {
+        while self.opened.is_some() && !self.pending.is_empty() {
             match self.writer.write(&self.pending) {
                 // A refusal dressed as a success. Treat it as backpressure
                 // rather than spinning on it.
@@ -405,10 +410,10 @@ impl<W: Write> Gateway<W> {
         }
     }
 
-    /// The client-size law: tell tmux the glass's grid. The *first* size goes
-    /// out immediately, because tmux has to hear it before this client's
-    /// windows are drawn at somebody else's, and later ones debounce behind
-    /// [`RESIZE_DEBOUNCE`], flushed by [`Gateway::poll`].
+    /// The client-size law: tell tmux the glass's grid. The *first* size
+    /// queues at once behind the bootstrap, because tmux has to hear it before
+    /// this client's windows are drawn at somebody else's, and later ones
+    /// debounce behind [`RESIZE_DEBOUNCE`], flushed by [`Gateway::poll`].
     pub fn set_client_size(&mut self, columns: u16, rows: u16) {
         if columns == 0 || rows == 0 {
             return;
@@ -431,9 +436,9 @@ impl<W: Write> Gateway<W> {
     /// `now` is the pump's own clock reading: this crate keeps deadlines,
     /// never timer objects.
     ///
-    /// Three things are deferred here. The queued wire goes out (whatever the
-    /// last flush left); a settled resize goes out behind it; and the
-    /// bootstrap watchdog reads the attachment's pulse.
+    /// The queued wire goes out (whatever the last flush left); a settled
+    /// resize goes out behind it; and the bootstrap watchdog reads the
+    /// attachment's pulse.
     ///
     /// The watchdog's shape is the flags gate failing: blocks keep arriving,
     /// every one of them marked unsolicited, so no reply ever resolves an
@@ -449,7 +454,7 @@ impl<W: Write> Gateway<W> {
             self.flush_client_size();
         }
         let mut out = Vec::new();
-        let overdue = now.saturating_duration_since(self.opened) >= BOOTSTRAP_DEADLINE;
+        let overdue = self.opened.is_some_and(|at| at + BOOTSTRAP_DEADLINE <= now);
         if self.attached && !self.solicited && self.unsolicited > 0 && overdue {
             log::warn!(
                 "tmux: the bootstrap went unanswered for {}s while {} block(s) arrived flagged \
@@ -905,8 +910,9 @@ impl<W: Write> Gateway<W> {
                 String::from_utf8_lossy(&rest)
             ),
             Notification::Exit { .. } => self.teardown(false, out),
-            // During the attach burst it is the burst's end, and the bootstrap
-            // has already gone out; afterwards it is `switch-client`, and this
+            // The first `%session-changed` ends the attach burst: tmux attached
+            // rather than ran one command and left, so the wire opens and the
+            // bootstrap goes out. A later one is `switch-client`, and this
             // client is on another session of the same server now.
             // `%client-session-changed` stays unhandled: re-listing on the
             // notification another client's arrival sends is a spawn loop.
@@ -915,6 +921,8 @@ impl<W: Write> Gateway<W> {
                     self.session = Some(session);
                     self.relist_due = true;
                 }
+                self.opened.get_or_insert_with(Instant::now);
+                self.flush();
             }
             // Window notifications only make sense once the initial set is
             // known; before that the bootstrap listing is the one source of
@@ -1082,9 +1090,11 @@ mod tests {
         }
     }
 
+    /// A gateway tmux has attached, so its wire is open.
     fn gateway() -> (Gateway<Wire>, Wire) {
         let wire = Wire::default();
-        let gateway = Gateway::new(wire.clone());
+        let mut gateway = Gateway::new(wire.clone());
+        gateway.advance(b"%session-changed $0 one\r\n");
         (gateway, wire)
     }
 
@@ -1113,16 +1123,33 @@ mod tests {
     }
 
     #[test]
-    fn the_bootstrap_goes_out_at_construction_with_no_timer() {
-        let (_gateway, wire) = gateway();
+    fn the_bootstrap_and_the_size_wait_for_session_changed_and_no_timer() {
+        let wire = Wire::default();
+        let mut gateway = Gateway::new(wire.clone());
+        gateway.set_client_size(80, 24);
+        assert_eq!(wire.lines(), Vec::<String>::new());
+        gateway.advance(b"%session-changed $0 one\r\n");
         assert_eq!(
             wire.lines(),
             vec![
                 r##"display-message -p "#{socket_path} #{pid} #{session_id} #{host_short}""##,
                 r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##,
                 r##"list-sessions -F "#{session_id} #{session_name}""##,
+                "refresh-client -C 80x24",
             ]
         );
+    }
+
+    /// `tmux -CC attach` with no server: the attach's own error and `%exit`,
+    /// in one burst. A line written here reaches the shell, which runs it.
+    #[test]
+    fn an_attach_that_fails_writes_nothing_to_the_wire() {
+        let wire = Wire::default();
+        let mut gateway = Gateway::new(wire.clone());
+        gateway.set_client_size(80, 24);
+        gateway.advance(b"%begin 1 274 0\r\nno sessions\r\n%error 1 274 0\r\n%exit\r\n");
+        gateway.poll(Instant::now());
+        assert_eq!(wire.lines(), Vec::<String>::new());
     }
 
     /// The listing the surface banks from: every session the server holds,
@@ -1537,12 +1564,13 @@ mod tests {
         let wire = TightWire::default();
         wire.budget.set(7);
         let mut gateway = Gateway::new(wire.clone());
-        // The bootstrap pair went out into a master with room for seven
-        // bytes: seven bytes of the first line are on the wire, and the rest
-        // of it (with the whole second line behind it) is queued.
+        gateway.advance(b"%session-changed $0 one\r\n");
+        // The bootstrap went out into a master with room for seven bytes:
+        // seven bytes of the first line are on the wire, and the rest of it
+        // (with the lines behind it) is queued.
         assert_eq!(wire.text(), "display");
 
-        // A paste-sized burst on top, into a wire that is still shut.
+        // A paste-sized burst on top, into a master that is still full.
         let pane = PaneId::parse("%0").unwrap();
         let paste: Vec<u8> = (0..700u32).map(|i| b'a' + (i % 26) as u8).collect();
         gateway.send_keys(&pane, &paste);
@@ -1552,8 +1580,8 @@ mod tests {
         wire.budget.set(usize::MAX);
         assert_eq!(gateway.poll(Instant::now()), vec![]);
 
-        // Every line whole, in the order it was sent: the bootstrap pair,
-        // then the paste's chunks.
+        // Every line whole, in the order it was sent: the bootstrap, then the
+        // paste's chunks.
         let text = wire.text();
         assert!(text.ends_with('\n'), "the wire ends on a line boundary");
         let lines: Vec<&str> = text.lines().collect();
@@ -1582,8 +1610,8 @@ mod tests {
         }
         assert_eq!(delivered, paste, "the paste arrived whole and in order");
 
-        // The pairing is the point: the bootstrap's two replies still land on
-        // the two intents that were registered for them.
+        // The pairing is the point: the bootstrap's replies still land on the
+        // intents that were registered for them.
         let events = attach(&mut gateway);
         assert_eq!(events[0], GatewayEvent::HostChanged("prime".into()));
         assert!(matches!(events[1], GatewayEvent::WindowAdded { .. }));
@@ -1605,6 +1633,7 @@ mod tests {
         let wire = TightWire::default();
         wire.budget.set(7);
         let mut gateway = Gateway::new(wire.clone());
+        gateway.advance(b"%session-changed $0 one\r\n");
 
         // Four times the cap of the user's typing, hex-encoded on the way in,
         // at a pane whose tmux is not reading.
@@ -1643,7 +1672,7 @@ mod tests {
 
         // And the pairing survives the shed, which is what says the codec was
         // never told about a command the wire did not carry: the bootstrap's
-        // two replies still land on the two intents registered for them.
+        // replies still land on the intents registered for them.
         wire.budget.set(usize::MAX);
         assert_eq!(gateway.poll(Instant::now()), vec![]);
         let events = attach(&mut gateway);
