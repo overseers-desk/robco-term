@@ -366,7 +366,7 @@ fn the_switchboard_tape_well_composites_its_chrome() {
     let px = |x: u32, y: u32| px8(&out, width, x, y);
     let mid_x = width / 2;
 
-    // `tape/mod.rs:86-95`: the floor's own vertical gradient runs darkest
+    // The floor's own vertical gradient runs darkest
     // at the top lip to lightest at the foot, so it is opaque and
     // monotone brightening top to bottom, sampled clear of the side walls
     // and the top shadow band.
@@ -378,7 +378,7 @@ fn the_switchboard_tape_well_composites_its_chrome() {
         "the floor's foot should be lighter than its lip: {top} vs {bottom}"
     );
 
-    // `:96-104`: the top lip's shadow, darker right under it than a few
+    // The top lip's shadow, darker right under it than a few
     // pixels down where the shade has faded to the bare gradient.
     let shadow = px(mid_x, 0)[0];
     let past_shadow = px(mid_x, 6)[0];
@@ -387,7 +387,7 @@ fn the_switchboard_tape_well_composites_its_chrome() {
         "no shadow under the well's top lip: {shadow} vs {past_shadow}"
     );
 
-    // `:105-122`: the left wall falls dark with the key leaning that way
+    // The left wall falls dark with the key leaning that way
     // and the right one catches a little of it, so at the same height the
     // left edge reads darker than the right.
     let mid_y = height / 2;

@@ -10,7 +10,7 @@ The peers were read at iTerm2 commit `ec4517e6` (2026-10-17) and WezTerm commit 
 | Capture as much history at attach as a scrollback holds | Follows |
 | Learn the server's dialect before sending commands that depend on it | Departs on purpose |
 | Show every pane of a window | Departs on purpose |
-| Say in the gateway pane how to leave control mode | Departs on purpose |
+| Say in the carrier pane how to leave control mode | Departs on purpose |
 
 ## Write nothing until `%session-changed`
 
@@ -44,9 +44,9 @@ tmux's command syntax has changed across releases. The commands robco-term sends
 
 ## Say how to leave control mode
 
-- iTerm2 prints `** tmux mode started **` and a command menu into the gateway session, where `Esc` detaches (`sources/PTYSession/PTYSession.m`).
-- WezTerm prints `[This pane is running tmux control mode. Press q to detach]` into the gateway pane, where `q` detaches (`mux/src/localpane.rs`).
-- robco-term writes nothing of its own into the gateway channel. `INVARIANTS.md` rules it out: "Nothing the appliance draws of its own accord may enter the session: it takes no keystroke, writes no cell the terminal owns". `Enter` detaches, because tmux itself reads an empty line in control mode as a detach. The three clients use three different keys, so which key detaches is not a convention.
+- iTerm2 prints `** tmux mode started **` and a command menu into the session that carries control mode, where `Esc` detaches (`sources/PTYSession/PTYSession.m`).
+- WezTerm prints `[This pane is running tmux control mode. Press q to detach]` into the pane that carries it, where `q` detaches (`mux/src/localpane.rs`).
+- robco-term writes nothing of its own into the carrier channel. `INVARIANTS.md` rules it out: "Nothing the appliance draws of its own accord may enter the session: it takes no keystroke, writes no cell the terminal owns". The attachment's bank has a title row instead, and pressing it raises a card reading `detach: Alt+Shift+D` (`Cmd` for `Alt` on macOS); `Alt+Shift+D` then detaches. The three clients use three different keys, so which key detaches is not a convention.
 
 ## Only iTerm2
 

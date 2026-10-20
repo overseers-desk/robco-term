@@ -33,7 +33,7 @@ Ceilings of the reader, each of which costs a spurious refusal and never a false
 
 ## tmux over the connection
 
-Type `tmux -CC` on an SSH channel and the attachment arrives exactly as it does locally: the channel becomes the gateway, the session's windows fill a bank of their own, and a detach brings the channel home to its slot on the connection's bank. Because the connection multiplexes, each SSH channel can carry its own attachment: several remote tmux sessions over one wire, one `tmux -CC` each. Sessions on the remote server are not discovered automatically; the discovery mechanism is local by construction.
+Type `tmux -CC` on an SSH channel and the attachment arrives exactly as it does locally, and [controls.md](controls.md#on-an-attachment) says how it behaves and how it is let go. Because the connection multiplexes, each SSH channel can carry its own attachment: several remote tmux sessions over one wire, one `tmux -CC` each. Sessions on the remote server are not discovered automatically; the discovery mechanism is local by construction.
 
 ## Authentication
 

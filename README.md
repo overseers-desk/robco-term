@@ -47,15 +47,13 @@ way changing input on real hardware did.
 **tmux as channels.** Type `tmux -CC` in any channel, on this machine or
 over ssh, with tmux 3.3 or later on the server; hyperlinks in a tmux window
 need tmux 3.4. The terminal notices tmux's control mode, and the session you
-attached arrives as a bank of channels of its own: the channel you typed in
-becomes its gateway and stops taking keystrokes, the session's windows fill
-the slots after it, and they are switched with the same chords as any other.
-On a local server every other session gets a bank too, each with a gateway
-the terminal starts for it; over ssh you get each session you attach, one
-per `--ssh` channel you type the attach into. There
-is no status bar to read, because the bank is doing that job. `Enter` on a
-gateway detaches: a channel you typed in comes home, one the terminal started
-closes. Nothing is lost if the terminal dies mid-session: run `tmux -CC`
+attached arrives as a bank of channels of its own, from slot 01 under a title
+row naming it, switched with the same chords as any other. The channel you
+typed in stays on your bank, dark while the attachment lasts, and comes back
+live when `Alt`+`Shift`+`D` detaches. On a local server every other session
+gets a bank too; over ssh you get each session you attach, one per `--ssh`
+channel you type the attach into. There is no status bar to read, because the
+bank is doing that job. Nothing is lost if the terminal dies mid-session: run `tmux -CC`
 again and every session comes back with its windows and their titles.
 
 **Built-in SSH, from the command line.** `robco-term --ssh user@host` opens

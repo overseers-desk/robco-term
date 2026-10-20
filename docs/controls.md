@@ -27,6 +27,7 @@ so the same bindings are typed there by pressing `Esc` and then the key.
 | `Alt`+`PageUp` / `PageDown` | Page the bank |
 | `Ctrl`+`Shift`+`B` | Fold the bank away, or bring it back |
 | `Ctrl`+`Shift`+`O` | On a tmux window, step to its next pane |
+| `Alt`+`Shift`+`D` | Let the bank on view go: detach a tmux attachment, close an SSH connection |
 
 The digit `0` on its own means channel 10. Digits are typed one at a time,
 and the chord fires the moment no longer slot number could still match what
@@ -45,6 +46,15 @@ like, and a band comes back to the station it was left on. A bank whose last
 channel has since exited comes back on the first slot it still holds, and one
 holding no channel at all comes back to no signal, where `Ctrl`+`Shift`+`T`
 starts the next one.
+
+A tmux or SSH bank heads each page with a title row, unnumbered, reading
+`tmux -CC # @<host>` or `user@host`; the home bank has none. The row is a
+label, not a channel: no digit names it, it is never on the air and nothing
+is dialled from it. Pressing it raises a card naming the key that lets the
+bank go, `detach: Alt+Shift+D` or `disconnect: Alt+Shift+D`. Paging onto a
+tmux or SSH bank raises a card with its identity. `Alt`+`Shift`+`D` does what
+the card says to the bank on view; on the home bank it reaches the program as
+the escape it is.
 
 `Ctrl`+`Shift`+`Left` / `Right` swap the channel on screen with its
 neighbour, and take an empty slot outright. The first slot and the last are
@@ -199,14 +209,14 @@ history behind it, so there the same keys are the program's own.
 
 ## On an attachment
 
-A tmux bank's gateway, the channel `tmux -CC` was typed in or one the
-terminal started for a session it found, is a picture to read and copy from
-rather than a surface to type at, because its pty carries the control-mode
-protocol itself. Every key is dropped there, except `Enter`, which detaches
-the client: a gateway you typed `tmux -CC` in comes home, and one the
-terminal started closes. Typing `tmux -CC` at a session that already has a
-bank opens a second one; tmux allows a second client and the terminal does
-not refuse it.
+The channel that runs `tmux -CC`, typed by you or started by the terminal
+for a session it found, stays on its own bank as the attachment's carrier. Its
+pty carries the control-mode protocol itself, so while the attachment lasts
+its strip stays dark and it takes no key. The session's windows fill a bank
+of their own from slot 01, under the title row. `Alt`+`Shift`+`D` with that
+bank in view detaches the client, and the carrier comes back live. Typing
+`tmux -CC` at a session that already has a bank opens a second one; tmux
+allows a second client and the terminal does not refuse it.
 
 Each tmux window gets one channel, and a window split into panes shows
 only its active pane there; the others are not drawn. Keys typed at that

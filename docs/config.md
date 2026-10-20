@@ -354,8 +354,8 @@ of screen. The picture arrives at the rate on both.
 It reaches a local shell and nothing else. A channel on SSH, and a tmux window
 arriving through control mode, have had their bytes read off a transport
 before they reach a grid, so metering them there would hold back bytes already
-in hand instead of leaving them unread at the far end. The gateway channel a
-`tmux -CC` opens is exempt for the same reason: its own PTY carries tmux's
+in hand instead of leaving them unread at the far end. The channel a
+`tmux -CC` runs in is exempt for the same reason: its own PTY carries tmux's
 protocol rather than a picture of a shell.
 
 | Key | Default | What it does |
