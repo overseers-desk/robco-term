@@ -274,6 +274,16 @@ fn detach_key(surface: &mut TerminalSurface) {
     press(surface, Key::Character("D".into()), Some("D"), CHORD | ModifiersState::SHIFT);
 }
 
+/// The carrier's own glass holds none of tmux's protocol, the envelope having
+/// gone to the tap and nowhere else.
+fn assert_carrier_clean(surface: &TerminalSurface) {
+    let row = surface.channels().rows().iter().find(|r| (r.bank, r.channel) == (0, 1));
+    let text = viewport_text(row.expect("the carrier row").session.term()).join("\n");
+    for leak in ["%begin", "%output", "\x1b"] {
+        assert!(!text.contains(leak), "{leak:?} on the carrier's glass:\n{text}");
+    }
+}
+
 /// The tmux window the channel on the air stands on.
 fn window_on_air(surface: &TerminalSurface) -> &str {
     let row = surface.channels().current().expect("a channel on the air");
@@ -363,6 +373,8 @@ fn phase_1_a_fresh_attach_populates_a_channel_for_every_window_from_slot_one() {
         });
         assert_eq!(row.channel as usize, slot + 1, "windows fill from slot 1");
     }
+
+    assert_carrier_clean(&surface);
 
     // The air crossed with the attach and the first window landed under it;
     // the ones tmux volunteers after it line up behind.
@@ -534,12 +546,14 @@ fn phase_6_alt_shift_d_detaches_and_the_carrier_is_live_again() {
     let mut surface = surface();
     let bank = attach(&mut surface, &server);
     assert_eq!(surface.channels().on_air().0, bank, "the tmux bank on view");
+    assert_carrier_clean(&surface);
     assert!(surface.detach_bank());
     pump_until(&mut surface, "the bank to collapse", |s| {
         s.channels().banks().len() == 1
     });
     assert_eq!(surface.channels().on_air(), (0, 1), "the air on the carrier");
     assert!(!surface.channels().is_carrier(0, 1));
+    assert_carrier_clean(&surface);
     assert_eq!(server.clients(), 0, "tmux let the client go");
     assert!(
         !server.windows().is_empty(),
