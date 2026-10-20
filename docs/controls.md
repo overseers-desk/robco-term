@@ -208,14 +208,16 @@ history behind it, so there the same keys are the program's own.
 
 ## On an attachment
 
-The channel that runs `tmux -CC`, typed by you or started by the terminal
-for a session it found, stays on its own bank as the attachment's carrier. Its
-pty carries the control-mode protocol itself, so while the attachment lasts
-its strip stays dark and it takes no key. The session's windows fill a bank
-of their own from slot 01, under the title row. `Alt`+`Shift`+`D` with that
-bank in view detaches the client, and the carrier comes back live. Typing
-`tmux -CC` at a session that already has a bank opens a second one; tmux
-allows a second client and the terminal does not refuse it.
+The channel you type `tmux -CC` in stays on its own bank as the
+attachment's carrier. Its pty carries the control-mode protocol itself, so
+while the attachment lasts its strip stays dark and it takes no key. The
+session's windows fill a bank of their own from slot 01, under the title
+row. `Alt`+`Shift`+`D` with that bank in view detaches the client, and the
+carrier comes back live. A client the terminal starts itself, for another
+session it finds on a local server, has no channel: its bank stands on the
+wire alone and goes when the client does. Typing `tmux -CC` at a session
+that already has a bank opens a second one; tmux allows a second client and
+the terminal does not refuse it.
 
 Each tmux window gets one channel, and a window split into panes shows
 only its active pane there; the others are not drawn. Keys typed at that
