@@ -94,6 +94,25 @@ impl TerminalSurface {
         self.channel_changed();
     }
 
+    /// `Alt+Shift+D`: the bank on view lets go of what it runs on. A tmux
+    /// attachment detaches, tmux keeping the session; an SSH bank's record
+    /// goes, and the dropped link is the disconnect. Declines on the home
+    /// bank, so the key reaches the program there.
+    pub fn detach_bank(&mut self) -> bool {
+        let view = self.pager.view(&self.channels).bank;
+        match self.channels.manager_of(view) {
+            Some(Manager::Tmux { .. }) => {
+                if let Some(gateway) = self.gateway_mut(view) {
+                    gateway.detach();
+                }
+            }
+            Some(Manager::Ssh { .. }) => drop(self.banks.remove(&view)),
+            Some(Manager::Home) | None => return false,
+        }
+        self.channel_changed();
+        true
+    }
+
     /// `Ctrl+PgUp` / `Ctrl+PgDown`.
     pub fn cycle_channel(&mut self, direction: i32) {
         self.channels.cycle_open(direction);

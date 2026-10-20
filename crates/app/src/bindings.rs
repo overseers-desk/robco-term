@@ -29,6 +29,7 @@ pub enum Action {
     MoveChannelRight,
     PageBankUp,
     PageBankDown,
+    DetachBank,
     SelectChannel,
     StoreChannel,
     OpenPicker,
@@ -51,6 +52,7 @@ const ACTIONS: &[(Action, &str)] = &[
     (Action::MoveChannelRight, "move_channel_right"),
     (Action::PageBankUp, "page_bank_up"),
     (Action::PageBankDown, "page_bank_down"),
+    (Action::DetachBank, "detach_bank"),
     (Action::SelectChannel, "select_channel"),
     (Action::StoreChannel, "store_channel"),
     (Action::OpenPicker, "open_picker"),
@@ -134,6 +136,7 @@ const SHIPPED: &[(&str, &str, Action)] = &[
     ("f", "ctrl | shift", Action::OpenFind),
     ("b", "ctrl | shift", Action::FoldBank),
     ("o", "ctrl | shift", Action::NextPane),
+    ("d", "chord | shift", Action::DetachBank),
     ("n", "ctrl | shift", Action::NewWindow),
     ("q", "ctrl | shift", Action::CloseWindow),
 ];
@@ -379,6 +382,8 @@ mod tests {
         assert_eq!(shipped.lookup(&character("B"), CTRL_SHIFT), Some(&Bound::Action(Action::FoldBank)));
         assert_eq!(shipped.lookup(&character("t"), CTRL_SHIFT), Some(&Bound::Action(Action::NewChannel)));
         assert_eq!(shipped.lookup(&character("O"), CTRL_SHIFT), Some(&Bound::Action(Action::NextPane)));
+        let chord_shift = crate::chord::modifier_mask() | ModifiersState::SHIFT;
+        assert_eq!(shipped.lookup(&character("D"), chord_shift), Some(&Bound::Action(Action::DetachBank)));
         assert_eq!(
             shipped.lookup(&Key::Named(NamedKey::PageUp), ModifiersState::CONTROL),
             Some(&Bound::Action(Action::PrevChannel))

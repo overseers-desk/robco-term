@@ -220,6 +220,7 @@ impl TerminalSurface {
             }
             Action::PageBankUp => self.step_bank(-1),
             Action::PageBankDown => self.step_bank(1),
+            Action::DetachBank => self.detach_bank(),
             Action::PrevChannel => {
                 self.cycle_channel(-1);
                 true
