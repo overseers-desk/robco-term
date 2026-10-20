@@ -110,9 +110,12 @@ impl<T: DcsTap> SshChannel<T> {
 
     /// Drain what the connection thread handed over and apply it.
     ///
-    /// Every remote chunk goes to both consumers, tap then grid, exactly as
-    /// the PTY pump does; the sync timeout is honoured here for the same
-    /// reason it is there: owning the loop means nothing else will.
+    /// Every remote chunk goes through the DCS parser and reaches the grid
+    /// only as what that parser hands back, exactly as the PTY pump does; a
+    /// `Notice` is the exception, being the transport's own word on this
+    /// channel's fate, which the Eof law below leaves readable nowhere else.
+    /// The sync timeout is honoured here for the same reason it is there:
+    /// owning the loop means nothing else will.
     ///
     /// The Eof law: a connection that lived (a remote byte arrived) ends
     /// its row through `Pumped::eof`, the path a died PTY walks. One that
@@ -127,13 +130,15 @@ impl<T: DcsTap> SshChannel<T> {
             out.eof = true;
             return out;
         }
+        let mut grid = Vec::new();
         while let Some(event) = self.wire.try_event() {
             match event {
                 SshEvent::Data(chunk) => {
                     self.lived = true;
                     out.bytes += chunk.len();
-                    self.dcs.feed(&chunk);
-                    self.processor.advance(&mut self.term, &chunk);
+                    grid.clear();
+                    self.dcs.feed(&chunk, &mut grid);
+                    self.processor.advance(&mut self.term, &grid);
                 }
                 SshEvent::Notice(chunk) => {
                     out.bytes += chunk.len();
@@ -173,10 +178,15 @@ impl<T: DcsTap> SshChannel<T> {
     /// move -- a prompt is the connection asking, not the connection having
     /// lived, so a refusal that arrives after one still leaves the row under
     /// the Eof law and the user still gets to read why. And the DCS tap
-    /// never sees them: control mode is a remote program's envelope, and
-    /// nothing typed at this glass may open one. That is the same reasoning
-    /// `SshEvent::Notice` runs on, and the same one line of body.
+    /// never sees them, nor does the grid while an envelope is open: control
+    /// mode is a remote program's envelope, nothing typed at this glass may
+    /// open one, and nothing the terminal draws belongs on a channel whose
+    /// wire is tmux's protocol. `SshEvent::Notice` shares the first reason
+    /// and not the second.
     pub fn feed(&mut self, bytes: &[u8]) {
+        if self.dcs.tap().in_control_mode() {
+            return;
+        }
         self.processor.advance(&mut self.term, bytes);
     }
 
@@ -243,13 +253,11 @@ impl<T: DcsTap> SshChannel<T> {
         self.wire.writer()
     }
 
-    /// Force both parsers out of a DCS string that will never close, the
+    /// Force the DCS parser out of an envelope that will never close, the
     /// counterpart of `Session::leave_control_mode` and for the same
     /// reason: at ground it is a no-op, so a healthy session pays nothing.
     pub fn leave_control_mode(&mut self) {
-        const ST: &[u8] = b"\x1b\\";
-        self.dcs.feed(ST);
-        self.processor.advance(&mut self.term, ST);
+        self.dcs.reset();
     }
 }
 

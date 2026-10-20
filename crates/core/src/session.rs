@@ -275,8 +275,9 @@ impl<T: DcsTap> Session<T> {
 
     /// Drain whatever the child has written and apply it.
     ///
-    /// Every chunk goes to two consumers: the DCS tap and the grid. See
-    /// `dcs.rs` for why feeding both is correct rather than double work.
+    /// Every chunk goes through the DCS parser, which peels any control-mode
+    /// envelope out of it and hands back what the grid may see; nothing else
+    /// feeds the grid (`dcs.rs` says why one feeder and not two).
     ///
     /// A pump that parsed a question also sends its answer
     /// ([`Session::send_replies`]): the child asks and hears back within the
@@ -307,6 +308,7 @@ impl<T: DcsTap> Session<T> {
             budget = None;
         }
 
+        let mut grid = Vec::new();
         loop {
             let want = match budget {
                 Some(0) => break,
@@ -332,12 +334,9 @@ impl<T: DcsTap> Session<T> {
                         *bytes -= n;
                         self.credit -= n as f64;
                     }
-                    // Copy out so the two consumers can each take
-                    // `&mut self`-adjacent borrows without fighting the
-                    // borrow checker over `self.buf`.
-                    let chunk: Vec<u8> = self.buf[..n].to_vec();
-                    self.dcs.feed(&chunk);
-                    self.processor.advance(&mut self.term, &chunk);
+                    grid.clear();
+                    self.dcs.feed(&self.buf[..n], &mut grid);
+                    self.processor.advance(&mut self.term, &grid);
                     // A short read means the buffer was not filled, so
                     // there is nothing queued behind it.
                     if n < want {
@@ -658,18 +657,16 @@ impl<T: DcsTap> Session<T> {
         ))
     }
 
-    /// Force both parsers out of a DCS string that will never close.
+    /// Force the DCS parser out of an envelope that will never close.
     ///
-    /// When the control client is killed without closing its device
-    /// string, no `ST` is ever coming,
-    /// and until one arrives the grid's parser swallows everything the
-    /// shell prints as DCS body. Feeding a synthetic `ST` to both
-    /// consumers returns them to ground; at ground it is a no-op, so
-    /// calling it on a healthy session costs nothing.
+    /// When the control client is killed without closing its envelope no
+    /// `%exit` and no `ST` are coming, and until the parser is reset every
+    /// byte the shell prints is peeled into the tap's body instead of
+    /// reaching the grid. The grid itself needs nothing: it never entered
+    /// the envelope. At ground the reset is a no-op, so calling it on a
+    /// healthy session costs nothing.
     pub fn leave_control_mode(&mut self) {
-        const ST: &[u8] = b"\x1b\\";
-        self.dcs.feed(ST);
-        self.processor.advance(&mut self.term, ST);
+        self.dcs.reset();
     }
 
     /// Apply a new geometry to both halves.
@@ -722,10 +719,15 @@ impl<T: DcsTap> Session<T> {
     /// child: what the terminal itself says on the glass, as against what
     /// the program below said.
     ///
-    /// The DCS tap is not fed, for the reason [`crate::SshChannel::feed`]
+    /// The DCS tap is not fed, and while the tap says an envelope is open
+    /// nothing is fed at all, for the reasons [`crate::SshChannel::feed`]
     /// gives at more length: control mode is a remote program's envelope,
-    /// and nothing written at this glass may open one.
+    /// nothing written at this glass may open one, and a channel carrying
+    /// tmux's protocol has no glass for the terminal to draw on.
     pub fn feed(&mut self, bytes: &[u8]) {
+        if self.dcs.tap().in_control_mode() {
+            return;
+        }
         self.processor.advance(&mut self.term, bytes);
     }
 

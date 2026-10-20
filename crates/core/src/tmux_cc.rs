@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn the_control_tap_detects_peels_and_reports_the_close() {
         let mut p = DcsParser::new(ControlModeTap::default());
-        p.feed(TMUX_DCS);
+        p.feed(TMUX_DCS, &mut Vec::new());
         let tap = p.tap_mut();
         assert!(tap.take_detected());
         assert!(!tap.take_detected(), "one edge per envelope");
@@ -154,7 +154,7 @@ mod tests {
     fn a_foreign_dcs_is_no_attachment() {
         // A DECRQSS reply: DCS 1 $ r ... ST. Wrong params, wrong action.
         let mut p = DcsParser::new(ControlModeTap::default());
-        p.feed(b"\x1bP1$r0m\x1b\\");
+        p.feed(b"\x1bP1$r0m\x1b\\", &mut Vec::new());
         let tap = p.tap_mut();
         assert!(!tap.take_detected());
         assert!(tap.take_body().is_empty());
@@ -187,7 +187,7 @@ mod tests {
                 let mut p = DcsParser::new(ControlModeTap::default());
                 let mut body = Vec::new();
                 for part in wire.chunks(chunk) {
-                    p.feed(part);
+                    p.feed(part, &mut Vec::new());
                     body.extend(p.tap_mut().take_body());
                 }
                 assert!(
@@ -254,7 +254,7 @@ mod tests {
         // And the tap is back on the ground afterwards, ready for the
         // text that follows the envelope.
         let mut p = DcsParser::new(ControlModeTap::default());
-        p.feed(&wire);
+        p.feed(&wire, &mut Vec::new());
         assert!(!p.tap().in_control_mode());
     }
 
@@ -264,11 +264,11 @@ mod tests {
         // on an 8-bit `ST` must still close, or the tap would swallow
         // every attachment that came after it.
         let mut p = DcsParser::new(ControlModeTap::default());
-        p.feed(b"\x1bPq#0;2;0;0;0\x9c");
+        p.feed(b"\x1bPq#0;2;0;0;0\x9c", &mut Vec::new());
         assert!(!p.tap().in_control_mode());
 
         // A real attachment right behind it is still seen.
-        p.feed(TMUX_DCS);
+        p.feed(TMUX_DCS, &mut Vec::new());
         let tap = p.tap_mut();
         assert!(tap.take_detected(), "the sixel ate the attachment");
         assert_eq!(
@@ -281,10 +281,10 @@ mod tests {
     fn the_body_survives_read_boundaries_and_drains_between_them() {
         let mut p = DcsParser::new(ControlModeTap::default());
         let (a, b) = TMUX_DCS.split_at(20);
-        p.feed(a);
+        p.feed(a, &mut Vec::new());
         assert!(p.tap_mut().take_detected());
         let first = p.tap_mut().take_body();
-        p.feed(b);
+        p.feed(b, &mut Vec::new());
         let second = p.tap_mut().take_body();
         let whole = [first, second].concat();
         assert_eq!(
@@ -304,7 +304,7 @@ mod tests {
             let mut p = DcsParser::new(ControlModeTap::default());
             let mut body = Vec::new();
             for part in wire.chunks(chunk) {
-                p.feed(part);
+                p.feed(part, &mut Vec::new());
                 body.extend(p.tap_mut().take_body());
                 assert!(
                     !p.tap_mut().take_ended(),
@@ -322,7 +322,10 @@ mod tests {
     #[test]
     fn exit_with_a_reason_closes_the_envelope() {
         let mut p = DcsParser::new(ControlModeTap::default());
-        p.feed(b"\x1bP1000p%exit server exited unexpectedly\r\n\x1b\\");
+        p.feed(
+            b"\x1bP1000p%exit server exited unexpectedly\r\n\x1b\\",
+            &mut Vec::new(),
+        );
         assert!(p.tap_mut().take_ended());
         assert!(!p.tap().in_control_mode());
     }

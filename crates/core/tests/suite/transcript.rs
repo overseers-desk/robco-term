@@ -501,45 +501,63 @@ fn control_mode_opening_takes_the_queued_input_with_it() {
     assert_eq!(session.queued_input(), 0);
 }
 
-/// The tap this test hangs on the session counts and nothing else
-/// (`NoopTap`, the test double the shipped `ControlModeTap` grew out of),
-/// because the wiring is what is under test here and not the policy above
-/// it. This asserts what owning the read loop buys: the body reaches the
-/// tap, and it does not reach the grid.
+/// The envelope stays off the grid, whatever it carries.
+///
+/// A `capture-pane -e` reply carries a raw `ESC [ 31 m` inside the body,
+/// which ends rio-vt's DCS string state, so a grid fed the envelope prints
+/// the rest of tmux's protocol as text. `printf` emits the envelope itself,
+/// so it arrives as real PTY output; `stty -echo` first, so nothing but the
+/// envelope and its tail can reach the grid and the assertion is absolute.
 #[test]
-fn a_dcs_block_reaches_the_tap_and_stays_off_the_grid() {
+fn an_envelope_full_of_escape_sequences_leaves_the_grid_clean() {
     let viewport = Viewport::new(800, 480, 1.0, CellSize::new(10.0, 20.0));
+    let config = SessionConfig {
+        args: vec![
+            "-c".to_string(),
+            "stty raw -echo; printf '\\033P1000p%%begin 1 1 1\\r\\n\\033[31mred\\033[0m\\r\\n\
+             %%end 1 1 1\\r\\n%%exit\\r\\n\\033\\\\AFTER-ENVELOPE\\n'; sleep 1"
+                .to_string(),
+        ],
+        ..config()
+    };
     let mut session =
-        Session::spawn(&config(), viewport.term_size(), NoopTap::default()).expect("spawn");
+        Session::spawn(&config, viewport.term_size(), ControlModeTap::default()).expect("spawn");
 
-    // `printf` emits the escape itself, so the DCS arrives from the
-    // child as real PTY output rather than being injected by the test.
-    // The command line is echoed, so the assertion below looks for the
-    // body's text on the *output* line, which is the line after it.
-    send(
-        &mut session,
-        "printf '\\033P1000p%%begin 1 1 1\\r\\n%%end 1 1 1\\033\\\\AFTER-DCS\\n'\n",
-    );
-    // `contains`: the prompt shares the line, so it reads "$ AFTER-DCS".
-    wait_for(&mut session, "AFTER-DCS", |s| {
-        live_text(s.term())
-            .iter()
-            .skip(1)
-            .any(|l| l.contains("AFTER-DCS"))
-    });
+    let mut body = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !live_text(session.term())
+        .iter()
+        .any(|l| l.contains("AFTER-ENVELOPE"))
+    {
+        assert!(
+            Instant::now() < deadline,
+            "the tail never reached the grid: {:?}",
+            live_text(session.term())
+        );
+        session.pump();
+        body.extend(session.tap_mut().take_body());
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    body.extend(session.tap_mut().take_body());
 
-    let tap = session.tap();
-    assert_eq!(tap.hooks, 1, "DCS hook did not fire on the tap");
-    assert_eq!(tap.unhooks, 1, "DCS block never closed on the tap");
-    assert!(tap.body_bytes > 0, "no DCS body bytes reached the tap");
-
-    // The echoed command line contains "%begin" as literal text, so the
-    // check is that no line *is* the body: the DCS body was never
-    // rendered as its own output line.
     let screen = live_text(session.term());
+    let printed: Vec<&str> = screen
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert_eq!(
+        printed,
+        ["AFTER-ENVELOPE"],
+        "the protocol reached the grid: {screen:?}"
+    );
     assert!(
-        !screen.iter().any(|l| l.trim() == "%begin 1 1 1"),
-        "DCS body leaked onto the grid: {screen:?}"
+        body.windows(5).any(|w| w == b"\x1b[31m"),
+        "the colour sequence did not reach the tap raw: {body:?}"
+    );
+    assert!(
+        session.tap_mut().take_ended(),
+        "the envelope never closed on the tap"
     );
 }
 
