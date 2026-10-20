@@ -139,6 +139,7 @@ mod row {
     /// A band's name, stamped across the whole plate in place of the switch.
     pub const BAND_PIXEL_SIZE: f64 = 16.0;
     pub const BAND_LETTER_SPACING: f64 = -0.5;
+    pub const BAND_LANE_WIDTH: f64 = super::metrics::NUMERAL_WIDTH as f64 - 12.0;
 }
 
 /// A riveted plate carrying the stamped numeral and the toggle well, the
@@ -239,15 +240,10 @@ pub fn row_furniture(
     // because the mock's stencil strokes are heavier than any weight this
     // face carries.
     let lane_x = 6.0;
+    let lane_w = (metrics::NUMERAL_CENTER_X as f64 - 8.0) * 2.0 + 4.0;
     let (text, lane_w, pixel_size, letter_spacing) = match band_label {
-        Some(name) => {
-            let lane_w = metrics::NUMERAL_WIDTH as f64 - 12.0;
-            (name, lane_w, row::BAND_PIXEL_SIZE, row::BAND_LETTER_SPACING)
-        }
-        None => {
-            let lane_w = (metrics::NUMERAL_CENTER_X as f64 - 8.0) * 2.0 + 4.0;
-            (numeral, lane_w, row::NUMERAL_PIXEL_SIZE, row::NUMERAL_LETTER_SPACING)
-        }
+        Some(name) => (name, row::BAND_LANE_WIDTH, row::BAND_PIXEL_SIZE, row::BAND_LETTER_SPACING),
+        None => (numeral, lane_w, row::NUMERAL_PIXEL_SIZE, row::NUMERAL_LETTER_SPACING),
     };
     if !text.is_empty() {
         let line_h = numeral_line_height(pixel_size);

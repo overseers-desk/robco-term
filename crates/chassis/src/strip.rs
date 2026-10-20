@@ -149,18 +149,6 @@ pub struct BankStrips {
 }
 
 impl BankStrips {
-    /// The slot behind a page numeral, or 0 where this page has no such row.
-    /// The chord commits through `app::bank::BankPager::absolute_slot`,
-    /// which can see the model; this is the drawing side's copy, waiting
-    /// for the pager furniture.
-    pub fn absolute_slot(&self, page_slot: u32) -> u32 {
-        self.rows
-            .iter()
-            .find(|r| r.label == page_slot)
-            .map(|r| r.channel)
-            .unwrap_or(0)
-    }
-
     /// The band as a display draws it: no numeral, no slot behind it (0),
     /// and never the channel on the air.
     pub fn band_row(&self) -> Option<StripRow> {
@@ -233,31 +221,8 @@ mod tests {
     }
 
     #[test]
-    fn a_page_numeral_resolves_to_the_slot_behind_it() {
-        let strips = BankStrips {
-            rows: (1..=3)
-                .map(|label| StripRow {
-                    channel: 10 + label,
-                    label,
-                    numeral: StripRow::numeral_text(label),
-                    title: String::new(),
-                    open: false,
-                    current: false,
-                    bright: false,
-                    ghost: false,
-                })
-                .collect(),
-            band: None,
-            page_index: 1,
-            page_count: 4,
-            indicator: ChannelIndicator::Glow,
-            current_row: None,
-            pointer_shown: false,
-        };
-        assert_eq!(strips.absolute_slot(1), 11);
-        assert_eq!(strips.absolute_slot(3), 13);
-        assert_eq!(strips.absolute_slot(4), 0, "no key is engraved for it");
-        assert_eq!(strips.absolute_slot(0), 0);
+    fn a_band_is_a_label_and_never_a_slot() {
+        let strips = BankStrips::cold_start(3);
         // Home carries no band; a managed bank's is a label, never a slot.
         assert_eq!(strips.band_row(), None);
         let band = BankStrips { band: Some("user@host".into()), ..strips }.band_row().unwrap();
