@@ -71,11 +71,6 @@ pub struct BankGeometry {
     /// here rather than from the settings, so the lamps and the width they
     /// were measured for cannot disagree.
     pub characters: i32,
-    /// The band's window ends where the rows' do and, where the shell lets
-    /// it, runs back across the numeral lane.
-    pub band_characters: i32,
-    pub band_strip_width: i32,
-    pub band_x: i32,
     /// A row is at least the shell's window, and grows if the strip inside
     /// it does.
     pub row_height: i32,
@@ -140,16 +135,8 @@ impl BankGeometry {
             shell.bank_padding + if lane_in_chassis { 0 } else { track_width } + track_gap;
         // No padding of the bank's own stands before the frame's moulding on
         // the right; the moulding is the strips' right frame.
-        let strip_x = content_x + shell.numeral_width + shell.column_gap;
-        let implicit_width = strip_x + strip_width + shell.right_padding;
-        // The most characters the band's span holds, counted no further than
-        // its pixels: a display that has not loaded measures every count at 0.
-        let lane = i32::from(shell.band_reclaims_lane) * (strip_x - content_x);
-        let band_characters = (led_characters..=led_characters + lane.max(0))
-            .filter(|&n| display.width_for_units(n) <= strip_width + lane)
-            .last()
-            .unwrap_or(led_characters);
-        let band_strip_width = display.width_for_units(band_characters);
+        let implicit_width =
+            content_x + shell.numeral_width + shell.column_gap + strip_width + shell.right_padding;
 
         BankGeometry {
             window_hole_height,
@@ -158,9 +145,6 @@ impl BankGeometry {
             strip_height,
             min_units: display.min_units(),
             characters: led_characters,
-            band_characters,
-            band_strip_width,
-            band_x: strip_x + strip_width - band_strip_width,
             row_height,
             track_width,
             lane_in_chassis,
@@ -260,10 +244,6 @@ mod tests {
         assert_eq!(g.content_x, 3);
         // 3 + 46 + 16 + 105 + 14.
         assert_eq!(g.implicit_width, 184);
-        // The band runs back across the 62px lane: round(5 * (20 + 2) * 1.5)
-        // = 165 fits 105 + 62, and 21 characters would not.
-        assert_eq!((g.band_characters, g.band_strip_width), (20, 165));
-        assert_eq!(g.band_x + g.band_strip_width, 3 + 46 + 16 + 105);
     }
 
     #[test]
@@ -324,8 +304,6 @@ mod tests {
         // 8 + 170 + 18 + 177 + 29. The mock's plate runs x 8..402, and the
         // bank's right edge lands on the screen well's trough at 402.
         assert_eq!(g.implicit_width, 402);
-        // The lane is the switch plate, so the band's window is the rows'.
-        assert_eq!((g.band_characters, g.band_x), (12, 8 + 170 + 18));
     }
 
     #[test]

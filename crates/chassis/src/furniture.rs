@@ -314,16 +314,6 @@ pub fn strip_rect(geometry: &BankGeometry, shell: &ShellMetrics, row: usize) -> 
     Rect::new(strip_x, strip_y, strip_w, strip_h)
 }
 
-/// The band's window, at the first pitch: [`strip_rect`]'s, widened leftward
-/// to [`BankGeometry::band_x`].
-pub fn band_rect(geometry: &BankGeometry, shell: &ShellMetrics) -> Rect {
-    Rect {
-        x: geometry.band_x as f64,
-        width: geometry.band_strip_width as f64,
-        ..strip_rect(geometry, shell, 0)
-    }
-}
-
 /// Which window of a page a press landed in: the band, or a numbered row
 /// counted from the top of the page's `rows`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -345,7 +335,7 @@ pub fn strip_at(
     y: f64,
 ) -> Option<StripHit> {
     let first = usize::from(strips.band.is_some());
-    if first == 1 && within(band_rect(geometry, shell), x, y) {
+    if first == 1 && within(strip_rect(geometry, shell, 0), x, y) {
         return Some(StripHit::Band);
     }
     (0..strips.rows.len())
@@ -467,12 +457,9 @@ pub fn bank_pieces(
     }
 
     // The band first, at the first pitch, then the numbered rows under it.
-    let band = strips.band_row().into_iter().map(|r| (band_rect(geometry, shell), r));
-    let numbered = strips.rows.iter().enumerate();
-    let numbered = numbered.map(|(i, r)| (strip_rect(geometry, shell, i + first), r.clone()));
-    for (strip, row) in band.chain(numbered) {
-        let band_label = (row.label == 0).then_some(row.title.as_str());
-        let characters = band_label.map_or(geometry.characters, |_| geometry.band_characters);
+    let rows = strips.band_row().into_iter().chain(strips.rows.iter().cloned());
+    for (pitch, row) in rows.enumerate() {
+        let strip = strip_rect(geometry, shell, pitch);
         // The row is the content lane by the shell's row height, and its
         // furniture fills it. The window's rectangle inside that row is
         // computed below from the shared `strip_rect`.
@@ -492,7 +479,6 @@ pub fn bank_pieces(
             cfg.chassis.shell,
             plastic,
             &row.numeral,
-            band_label,
             (row_rect.width, row_rect.height),
             display_rect,
             row.current,
@@ -507,9 +493,7 @@ pub fn bank_pieces(
         // window because the mark is the selector's or the lever's.
         let bright = row.bright;
         match display {
-            Display::Led(kit) => {
-                pieces.extend(led_piece(cfg, kit, geometry, characters, strip, &row, bright))
-            }
+            Display::Led(kit) => pieces.extend(led_piece(cfg, kit, geometry, strip, &row, bright)),
             Display::Tape(kit) => {
                 // The well is fixed furniture and is drawn always; the tape
                 // is only there when a channel is. So the chrome goes down
@@ -584,7 +568,6 @@ fn led_piece(
     cfg: &Config,
     kit: &LedMetrics,
     geometry: &BankGeometry,
-    characters: i32,
     strip: Rect,
     row: &StripRow,
     bright: bool,
@@ -592,7 +575,7 @@ fn led_piece(
     // The count the strip was measured at, not the count the settings ask
     // for: in a window too narrow for the configured bank the two part
     // company, and the lamps belong to the width beside them.
-    let characters = characters.max(0) as u32;
+    let characters = geometry.characters.max(0) as u32;
     let lamp_cell_width = kit.lamp_cell_width.max(1) as u32;
     let lamp_cell_height = kit.lamp_cell_height.max(1) as u32;
     let pad_cells_y = geometry.pad_cells_y.max(0) as u32;
@@ -758,10 +741,9 @@ mod tests {
             cabinet.strip_at(&page, x, mid(strip_rect(g, &shell, rows)).1),
             None
         );
-        // A band takes the first pitch, ending where the rows' windows end.
+        // A band takes the first pitch, a window like the rows' under it.
         let page = BankStrips { band: Some("tmux -CC # @host".into()), ..page };
-        let band = band_rect(g, &shell);
-        assert!(band.x < third.x && band.x + band.width == third.x + third.width);
+        let band = strip_rect(g, &shell, 0);
         assert_eq!(cabinet.strip_at(&page, x, mid(band).1), Some(StripHit::Band));
         assert_eq!(cabinet.strip_at(&page, x, y), Some(StripHit::Row(1)));
     }
@@ -881,7 +863,7 @@ mod tests {
         let banded = BankStrips { band: Some("user@host".into()), ..BankStrips::cold_start(3) };
         let banded = cabinet.furniture(&banded);
         assert_eq!(banded.len(), 1 + 4 + 2 + 2 * 3 + 1);
-        assert_eq!(banded[6].rect.x, g.band_x as f64 - sx as f64);
+        assert_eq!(banded[6].rect, strip_piece(0).rect);
         assert_eq!(banded[8].rect, strip_piece(1).rect);
     }
 

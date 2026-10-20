@@ -1124,7 +1124,7 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
     surface.press_strip(2);
     assert_eq!(surface.channels().on_air(), (bank, 2));
     let shell = chassis::shell_metrics(&config::Config::default());
-    let band = chassis::furniture::band_rect(surface.cabinet().unwrap().geometry(), &shell);
+    let band = chassis::furniture::strip_rect(surface.cabinet().unwrap().geometry(), &shell, 0);
     let at = winit::dpi::PhysicalPosition::new(band.x + 4.0, band.y + 4.0);
     surface.mouse_pressed(winit::event::MouseButton::Left, at, ModifiersState::empty());
     assert_eq!(surface.notice().text(), app::window::BAND_DETACH);

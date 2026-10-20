@@ -118,7 +118,6 @@ fn the_annunciator_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
-            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -157,7 +156,6 @@ fn the_slide_rule_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
-            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -197,7 +195,6 @@ fn the_switchboard_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
-            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             // No track anywhere on this panel: the thrown switch is the mark.
