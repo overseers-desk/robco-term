@@ -106,6 +106,16 @@ impl TerminalSurface {
         true
     }
 
+    /// A press on the band: a label, so it names the key that lets the bank go.
+    pub(super) fn press_band(&mut self) {
+        let card = match self.channels.manager_of(self.pager.view(&self.channels).bank) {
+            Some(Manager::Tmux { .. }) => super::BAND_DETACH,
+            Some(Manager::Ssh { .. }) => super::BAND_DISCONNECT,
+            Some(Manager::Home) | None => return,
+        };
+        self.notice.raise(card, Instant::now());
+    }
+
     /// `Ctrl+PgUp` / `Ctrl+PgDown`.
     pub fn cycle_channel(&mut self, direction: i32) {
         self.channels.cycle_open(direction);
@@ -158,8 +168,8 @@ impl TerminalSurface {
     /// `Alt+PgUp` / `Alt+PgDown`: within one bank's stretch the pager views
     /// a page without stealing the air; landing on another bank's stretch
     /// brings back the channel that bank last had on the air
-    /// ([`crate::channels::Channels::select_bank`] owns that rule).
-    /// Answers whether there was a bank to step.
+    /// ([`crate::channels::Channels::select_bank`] owns that rule), and a card
+    /// names a managed bank. Answers whether there was a bank to step.
     pub fn step_bank(&mut self, direction: i32) -> bool {
         if !self.has_bank() {
             return false;
@@ -172,6 +182,9 @@ impl TerminalSurface {
             return true;
         }
         self.channels.select_bank(landed);
+        if let Some(name) = self.channels.bank_identity(landed) {
+            self.notice.raise(name, Instant::now());
+        }
         // `channel_changed` settles the bank and turns it to the channel it
         // just put on the air.
         self.channel_changed();

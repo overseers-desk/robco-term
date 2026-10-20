@@ -168,6 +168,17 @@ pub const SHED_TMUX: &str = "tmux input dropped";
 /// two above.
 pub const SHED_SSH: &str = "ssh input dropped";
 
+/// What a press on a band says: the key that lets the bank go, on a tmux bank
+/// and on an SSH bank. The chord is Cmd on macOS, as for every chord key.
+#[cfg(not(target_os = "macos"))]
+pub const BAND_DETACH: &str = "detach: Alt+Shift+D";
+#[cfg(not(target_os = "macos"))]
+pub const BAND_DISCONNECT: &str = "disconnect: Alt+Shift+D";
+#[cfg(target_os = "macos")]
+pub const BAND_DETACH: &str = "detach: Cmd+Shift+D";
+#[cfg(target_os = "macos")]
+pub const BAND_DISCONNECT: &str = "disconnect: Cmd+Shift+D";
+
 /// What stands on the glass when the air is on a bank with no open row: what
 /// the dark screen is, and the one thing to do about it. No timer.
 pub const NO_SIGNAL: [&str; 2] = ["no channel on this bank", "Ctrl+Shift+T starts one"];

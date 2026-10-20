@@ -1119,14 +1119,22 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
     );
     assert_eq!(surface.channels().on_air(), (bank, 1), "the air crossed");
 
-    // Leave the attachment standing on its second window.
+    // Leave the attachment standing on its second window. Its band is a
+    // label naming the key that detaches.
     surface.press_strip(2);
+    assert_eq!(surface.channels().on_air(), (bank, 2));
+    let shell = chassis::shell_metrics(&config::Config::default());
+    let band = chassis::furniture::band_rect(surface.cabinet().unwrap().geometry(), &shell);
+    let at = winit::dpi::PhysicalPosition::new(band.x + 4.0, band.y + 4.0);
+    surface.mouse_pressed(winit::event::MouseButton::Left, at, ModifiersState::empty());
+    assert_eq!(surface.notice().text(), app::window::BAND_DETACH);
     assert_eq!(surface.channels().on_air(), (bank, 2));
 
     // Page home. Home was left on slot 2, which carries the wire, so the air
     // falls to the first row home still has.
     press(&mut surface, Key::Named(NamedKey::PageUp), None, CHORD);
     assert_eq!(surface.channels().on_air(), (0, 1));
+    assert_eq!(surface.notice().text(), app::window::BAND_DETACH, "home has no card");
 
     // Home takes a channel of its own, and that is where it is left.
     surface.new_channel();
@@ -1135,6 +1143,8 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
     // Back to the attachment: the window it was left on, not its first.
     press(&mut surface, Key::Named(NamedKey::PageDown), None, CHORD);
     assert_eq!(surface.channels().on_air(), (bank, 2));
+    let name = surface.channels().bank_identity(bank).unwrap();
+    assert_eq!(surface.notice().text(), name, "crossing in names the bank");
     let strips = surface.bank_strips();
     assert!(
         strips.current_row.is_some(),

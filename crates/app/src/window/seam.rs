@@ -62,6 +62,7 @@ impl TerminalSurface {
         };
         // The band is a label: no slot stands behind it.
         if row.channel == 0 {
+            self.press_band();
             return true;
         }
         // A dark slot's press starts a session and carries nothing.
