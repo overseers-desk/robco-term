@@ -47,14 +47,13 @@ channel has since exited comes back on the first slot it still holds, and one
 holding no channel at all comes back to no signal, where `Ctrl`+`Shift`+`T`
 starts the next one.
 
-A tmux or SSH bank heads each page with a title row, unnumbered, reading
+A tmux or SSH bank heads each page with an unnumbered title row reading
 `tmux -CC # @<host>` or `user@host`; the home bank has none. The row is a
-label, not a channel: no digit names it, it is never on the air and nothing
-is dialled from it. Pressing it raises a card naming the key that lets the
-bank go, `detach: Alt+Shift+D` or `disconnect: Alt+Shift+D`. Paging onto a
-tmux or SSH bank raises a card with its identity. `Alt`+`Shift`+`D` does what
-the card says to the bank on view; on the home bank it reaches the program as
-the escape it is.
+label, not a channel: no digit names it and it is never on the air.
+Pressing it raises a card naming the key that lets the bank go,
+`detach: Alt+Shift+D` or `disconnect: Alt+Shift+D`, and paging onto the bank
+raises a card with its identity. On the home bank `Alt`+`Shift`+`D` reaches
+the program as the escape it is.
 
 `Ctrl`+`Shift`+`Left` / `Right` swap the channel on screen with its
 neighbour, and take an empty slot outright. The first slot and the last are

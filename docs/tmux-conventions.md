@@ -64,5 +64,5 @@ These behaviours are iTerm2's alone; WezTerm, like robco-term, has none of them.
 
 - Replies are paired with commands by the order the commands were sent; robco-term also checks the `%begin` flags field, which marks a reply to this client's own command, and tmux has set that field since 2.9 at least.
 - Sizes go to tmux as `refresh-client -C`.
-- Typing at the gateway pane is dropped, apart from the detach key.
+- Typing at the pane that carries control mode reaches nothing.
 - `%config-error` and `%message` stay off the screen: iTerm2 logs them as unrecognised lines, WezTerm logs configuration errors, robco-term logs both as warnings.
