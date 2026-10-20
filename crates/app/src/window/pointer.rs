@@ -170,17 +170,6 @@ impl TerminalSurface {
     fn pointer_context(&self) -> PointerContext {
         PointerContext {
             terminal_uses_mouse: self.terminal_uses_mouse(),
-            // `frozen_glass` is one thing and one thing only: this channel is
-            // the gateway. An earlier revision had no channel model
-            // to read it from and stood a scrolled-back view in for it
-            // instead; the model exists now, and that substitute is retired.
-            //
-            // What it buys: over the gateway a drag marks the screen instead
-            // of reporting to the program, the pointer keeps its I-beam, and
-            // the middle button's paste goes nowhere -- the glass is still a
-            // picture to read and copy from; it is no longer a surface to
-            // type at.
-            frozen_glass: false,
         }
     }
 

@@ -6,10 +6,7 @@
 //! without a pointer.
 //!
 //! The rule underneath everything: a program that turned mouse reporting on
-//! owns the pointer, and Shift is the user's override. One twist on top of
-//! that: on frozen glass (a detached, scrolled-back view) Shift is held down
-//! for the user, so dragging always marks a selection and nothing the mouse
-//! does is written to the wire.
+//! owns the pointer, and Shift is the user's override.
 
 /// The modifier keys.
 ///
@@ -54,31 +51,12 @@ pub enum Button {
 pub struct PointerContext {
     /// The program below turned on mouse reporting (`terminalUsesMouse`).
     pub terminal_uses_mouse: bool,
-    /// The channel is a tmux attachment's gateway, so the glass below is the
-    /// picture its shell left when it entered control mode and the pty under
-    /// it is the protocol's wire.
-    pub frozen_glass: bool,
 }
 
 impl PointerContext {
-    /// Whether dragging marks the screen rather than driving the program.
-    /// True whenever the program is not listening, and forced true on
-    /// frozen glass.
+    /// Whether dragging marks the screen rather than driving the program:
+    /// whenever the program is not listening.
     pub fn marks_selection(&self) -> bool {
-        self.frozen_glass || !self.terminal_uses_mouse
-    }
-
-    /// On frozen glass, Shift is held down for the user.
-    pub fn marking(&self, modifiers: Modifiers) -> Modifiers {
-        if self.frozen_glass {
-            modifiers.with_shift()
-        } else {
-            modifiers
-        }
-    }
-
-    /// The emulation marks unless the program asked for the mouse.
-    fn mouse_marks(&self) -> bool {
         !self.terminal_uses_mouse
     }
 }
@@ -101,8 +79,7 @@ pub enum PointerAction {
     /// is the only way in from the window, so the app runs the settings
     /// binary that ships beside it rather than doing anything to the screen.
     OpenSettings,
-    /// Swallow it. Middle click on frozen glass: a paste is inert on an
-    /// anchor, so the event never reaches the core.
+    /// Swallow it: a right press with Shift held.
     Ignore,
 }
 
@@ -124,24 +101,17 @@ pub fn on_press(
     modifiers: Modifiers,
     over_hot_spot: bool,
 ) -> PointerAction {
-    // Two cases are intercepted before the core sees anything.
-    if ctx.frozen_glass && button == Button::Middle {
-        return PointerAction::Ignore;
-    }
-    let marking = ctx.marking(modifiers);
     // A right press with Shift held is deliberately inert: Shift is the
     // override that takes the pointer back from the program, and a press that
     // was made to reach the emulation should not open a window over the glass
     // in the middle of a drag the user is holding Shift for. The unmodified
     // right press falls through to the table, where marking glass opens the
-    // settings application. `modifiers` and not `marking` is read here on
-    // purpose: frozen glass holds Shift down for the user, and that borrowed
-    // Shift is about selection, not about suppressing the menu.
+    // settings application.
     if modifiers.shift && button == Button::Right {
         return PointerAction::Ignore;
     }
 
-    let marks = ctx.mouse_marks() || marking.shift;
+    let marks = ctx.marks_selection() || modifiers.shift;
     match button {
         Button::Left => {
             if marks {
@@ -157,7 +127,7 @@ pub fn on_press(
         Button::Middle => {
             if marks {
                 PointerAction::PastePrimary {
-                    bracketed: marking.control,
+                    bracketed: modifiers.control,
                 }
             } else {
                 PointerAction::ReportToProgram

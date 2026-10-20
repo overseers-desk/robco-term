@@ -66,7 +66,7 @@
 //!    cell, which is the coordinate [`term::selection`] works in;
 //! 3. [`term::pointer`] decides what the event means (mark the screen,
 //!    report to the program, or paste), because that depends on terminal
-//!    state (mouse reporting, frozen glass), not on the window;
+//!    state (mouse reporting), not on the window;
 //! 4. only then does anything happen: a selection, a
 //!    [`crate::mouse`]-encoded report down the PTY, or a
 //!    [`crate::clipboard`] copy.

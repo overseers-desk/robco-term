@@ -27,7 +27,6 @@ fn join_lines() -> Modifiers {
 fn a_program_that_asked_for_the_mouse_gets_it() {
     let ctx = PointerContext {
         terminal_uses_mouse: true,
-        frozen_glass: false,
     };
     assert!(!ctx.marks_selection());
     assert_eq!(
@@ -42,35 +41,9 @@ fn a_program_that_asked_for_the_mouse_gets_it() {
 }
 
 #[test]
-fn frozen_glass_holds_shift_down_for_the_user() {
-    let ctx = PointerContext {
-        terminal_uses_mouse: true,
-        frozen_glass: true,
-    };
-    assert!(ctx.marks_selection(), "an anchor always marks");
-    assert!(ctx.marking(Modifiers::NONE).shift);
-    assert_eq!(
-        on_press(ctx, Button::Left, Modifiers::NONE, false),
-        PointerAction::Mark
-    );
-    assert_eq!(
-        on_press(ctx, Button::Middle, Modifiers::NONE, false),
-        PointerAction::Ignore,
-        "a paste is inert on an anchor, so the event never reaches the core"
-    );
-    assert_eq!(
-        on_press(ctx, Button::Right, Modifiers::NONE, false),
-        PointerAction::OpenSettings,
-        "an anchor is still glass the user is looking at, so the right press \
-         reaches the settings application rather than the program"
-    );
-}
-
-#[test]
 fn a_right_press_on_plain_glass_opens_the_settings_application() {
     let ctx = PointerContext {
         terminal_uses_mouse: false,
-        frozen_glass: false,
     };
     assert_eq!(
         on_press(ctx, Button::Right, Modifiers::NONE, false),
@@ -88,7 +61,6 @@ fn a_right_press_on_plain_glass_opens_the_settings_application() {
 fn a_program_tracking_the_mouse_still_gets_the_right_button() {
     let ctx = PointerContext {
         terminal_uses_mouse: true,
-        frozen_glass: false,
     };
     assert_eq!(
         on_press(ctx, Button::Right, Modifiers::NONE, false),
@@ -101,7 +73,6 @@ fn a_program_tracking_the_mouse_still_gets_the_right_button() {
 fn a_left_press_on_a_link_anchors_and_activates() {
     let ctx = PointerContext {
         terminal_uses_mouse: false,
-        frozen_glass: false,
     };
     assert_eq!(
         on_press(ctx, Button::Left, Modifiers::NONE, true),
