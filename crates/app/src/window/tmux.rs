@@ -8,7 +8,8 @@
 //! The protocol is [`crate::tmux::Gateway`]'s and the slot arithmetic is
 //! [`crate::channels`]'s; what is here is the wiring between them.
 //!
-//! Fields touched: `banks`, whose record holds each attachment's client half;
+//! Fields touched: `banks`, whose record holds each attachment's client half
+//! and, on a bank raised for a session found on a server, its wire;
 //! `channels`, which the gateway's events move; `sessions`, the register of
 //! every session seen on every server, keyed by socket, server pid and id;
 //! and `viewport` and `session_config`, which size and configure the clients
@@ -22,7 +23,7 @@ use tmux_cc::{PaneId, SessionId};
 use crate::channels::{BankId, Manager};
 use crate::tmux::{server_is_local, tmux_binary, Gateway, GatewayEvent};
 
-use super::{spawn, TerminalSurface};
+use super::{spawn, AppSession, TerminalSurface};
 
 /// How many banks this surface raises for sessions it finds on a server; a starting value, not a measurement.
 const FOUND_BANK_CAP: usize = 8;
@@ -60,30 +61,16 @@ impl TerminalSurface {
     /// ask for.
     /// Answers what [`Self::pump_gateway`] counted, summed over the banks.
     pub(super) fn pump_gateways(&mut self) -> usize {
-        // Detection: a PTY channel's program entered control mode. The
-        // channel transports to a new bank and its PTY becomes the
-        // attachment's wire.
+        // Detection: a channel's program entered control mode, and its PTY
+        // becomes the wire of a new bank.
         let mut detected: Vec<(BankId, u32)> = Vec::new();
         for row in self.channels.rows_mut() {
-            if let Some(tap) = row.session.tap_mut() {
-                if tap.take_detected() {
-                    detected.push((row.bank, row.channel));
-                }
+            if row.session.tap_mut().is_some_and(|tap| tap.take_detected()) {
+                detected.push((row.bank, row.channel));
             }
         }
         for (bank, channel) in detected {
-            // A gateway row on a standing bank is a client this surface started.
-            let banked = self
-                .banks
-                .get(&bank)
-                .is_some_and(|runtime| runtime.gateway.is_some());
-            if channel == 1 && !banked && self.is_tmux(bank) {
-                if !self.start_gateway(bank) {
-                    self.collapse_bank(bank, false);
-                }
-            } else {
-                self.attach(bank, channel);
-            }
+            self.attach(bank, channel);
         }
 
         let banks: Vec<BankId> = self
@@ -99,7 +86,7 @@ impl TerminalSurface {
         visible
     }
 
-    /// One detection on a home channel: raise the bank over it, then the gateway.
+    /// One detection on a channel: raise a bank for it, then the gateway.
     fn attach(&mut self, bank: BankId, channel: u32) {
         // The tmux server's hostname is the bootstrap's to resolve
         // (`host_changed`); the bank opens under the empty name briefly, until
@@ -115,14 +102,54 @@ impl TerminalSurface {
         }
     }
 
-    /// Dup a bank's gateway wire, raise the client half, and tell every
-    /// attachment the glass's grid (the client-size law, `crate::channels`).
+    /// The PTY carrying a bank's wire: its carrier row where a typed
+    /// `tmux -CC` raised the bank, else the client this surface started.
+    fn wire_mut(&mut self, bank: BankId) -> Option<&mut AppSession> {
+        match self.channels.manager_of(bank)?.carrier() {
+            Some(pair) => self
+                .channels
+                .rows_mut()
+                .find(|r| (r.bank, r.channel) == pair)
+                .map(|r| &mut r.session),
+            None => self.banks.get_mut(&bank)?.wire.as_mut(),
+        }
+    }
+
+    /// The clients this surface started for sessions it found, pumped beside
+    /// the rows. One whose envelope opened gets its client half; one whose
+    /// PTY closed takes its bank down, and holds off a restart if it closed
+    /// before its envelope opened.
+    pub(super) fn pump_wires(&mut self) {
+        let (mut opened, mut dead) = (Vec::new(), Vec::new());
+        for (bank, runtime) in &mut self.banks {
+            let Some(wire) = runtime.wire.as_mut() else {
+                continue;
+            };
+            let started = runtime.gateway.is_some();
+            if wire.pump().eof {
+                dead.push((*bank, started));
+            } else if !started && wire.tap_mut().is_some_and(|tap| tap.take_detected()) {
+                opened.push(*bank);
+            }
+        }
+        for bank in opened {
+            if !self.start_gateway(bank) {
+                self.collapse_bank(bank, false);
+            }
+        }
+        for (bank, started) in dead {
+            if !started {
+                log::warn!("tmux: bank {bank}'s client died before the protocol opened");
+                self.forget_bank(bank, true);
+            }
+            self.collapse_bank(bank, true);
+        }
+    }
+
+    /// Dup a bank's wire, raise the client half, and tell every attachment
+    /// the glass's grid (the client-size law, `crate::channels`).
     fn start_gateway(&mut self, bank: BankId) -> bool {
-        let writer = self
-            .channels
-            .rows_mut()
-            .find(|r| r.bank == bank && r.channel == 1)
-            .and_then(|r| r.session.control_writer());
+        let writer = self.wire_mut(bank).and_then(|wire| wire.control_writer());
         match writer {
             Some(Ok(writer)) => {
                 self.banks.entry(bank).or_default().gateway = Some(Gateway::new(writer));
@@ -134,7 +161,7 @@ impl TerminalSurface {
                 false
             }
             None => {
-                log::error!("tmux: no wire for the attachment: the slot has none");
+                log::error!("tmux: no wire for the attachment: the bank has none");
                 false
             }
         }
@@ -173,7 +200,7 @@ impl TerminalSurface {
         }
         let mut up = 0;
         for b in self.channels.banks() {
-            up += usize::from(matches!(b.manager, Manager::Tmux { home: None, .. }));
+            up += usize::from(matches!(b.manager, Manager::Tmux { carrier: None, .. }));
         }
         let size = self.viewport.term_size();
         let now = Instant::now();
@@ -192,11 +219,13 @@ impl TerminalSurface {
             config.args = args.iter().map(|a| a.to_string()).collect();
             // Empty on purpose: a client refuses to attach from inside another tmux.
             config.env.push(("TMUX".to_string(), String::new()));
-            // Host name empty until the client's own bootstrap names it.
-            let Some(raised) = self.channels.attach_spawned("", || spawn(&config, size)) else {
+            let Some(wire) = spawn(&config, size) else {
                 log::warn!("tmux: no client for session {name} on {socket}");
                 continue;
             };
+            // Host name empty until the client's own bootstrap names it.
+            let raised = self.channels.attach_found("");
+            self.banks.entry(raised).or_default().wire = Some(wire);
             log::info!("tmux: bank {raised} raised for session {name} on {socket}");
             self.sessions.insert(key, SessionSlot::Spawning(raised));
             up += 1;
@@ -230,12 +259,10 @@ impl TerminalSurface {
             return visible;
         };
         // The peeled envelope body, and whether an `ST` closed it, off the
-        // gateway's own tap.
+        // wire's own tap.
         let drained = self
-            .channels
-            .rows_mut()
-            .find(|r| r.bank == bank && r.channel == 1)
-            .and_then(|r| r.session.tap_mut())
+            .wire_mut(bank)
+            .and_then(|wire| wire.tap_mut())
             .map(|tap| (tap.take_body(), tap.take_ended()));
         let Some((bytes, ended)) = drained else {
             // No gateway, no wire: the bank collapsed under this client.
@@ -256,8 +283,8 @@ impl TerminalSurface {
 
         // The write side of the keystroke diversion: what the window sessions
         // queued becomes `send-keys`. Which keys get queued is settled before
-        // they reach here, by `key_input` and `write`: a gateway's are
-        // swallowed, a window's land in its `TmuxPane`.
+        // they reach here, by `key_input` and `write`: a window's land in its
+        // `TmuxPane`.
         let mut inputs: Vec<(PaneId, Vec<u8>)> = Vec::new();
         for row in self.channels.rows_mut().filter(|r| r.bank == bank) {
             let Some((_, pane)) = row.tmux.clone() else {
@@ -379,25 +406,18 @@ impl TerminalSurface {
         visible
     }
 
-    /// Detach or gateway death: the model collapses the bank
-    /// (`channels::Channels::collapse_bank`), and a protocol lost without an
-    /// `ST` also forces the gateway's parsers out of the envelope no one will
-    /// ever close (`term::Session::leave_control_mode`).
-    fn collapse_bank(&mut self, bank: BankId, lost_protocol: bool) {
-        let home = self.channels.collapse_bank(bank);
-        self.forget_bank(bank, false);
-        // A bank that never held a home slot left no row to tell.
+    /// Detach or a dead wire: a protocol lost without an `ST` first forces
+    /// the wire's parser out of the envelope no one will ever close
+    /// (`term::Session::leave_control_mode`), then the model collapses the
+    /// bank (`channels::Channels::collapse_bank`).
+    pub(super) fn collapse_bank(&mut self, bank: BankId, lost_protocol: bool) {
         if lost_protocol {
-            if let Some((home_bank, home_slot)) = home {
-                let row = self
-                    .channels
-                    .rows_mut()
-                    .find(|r| r.bank == home_bank && r.channel == home_slot);
-                if let Some(row) = row {
-                    row.session.leave_control_mode();
-                }
+            if let Some(wire) = self.wire_mut(bank) {
+                wire.leave_control_mode();
             }
         }
+        self.channels.collapse_bank(bank);
+        self.forget_bank(bank, false);
         log::info!("tmux: bank {bank} collapsed (protocol lost: {lost_protocol})");
     }
 
@@ -420,49 +440,6 @@ impl TerminalSurface {
                 gateway.set_client_size(columns, rows);
             }
         }
-    }
-
-    /// The gateway's keyboard, which is the whole of what an attached
-    /// channel does with typed input.
-    ///
-    /// Every key is accepted and dropped, and the bare Enter is turned into
-    /// the empty line tmux's control mode reads as "detach". The glass under
-    /// it is still a picture to read and copy from; it is no longer a
-    /// surface to type at, because that pty *is* the protocol's wire.
-    ///
-    /// **The one subtlety, and it is protocol hygiene.** Writing the `\r`
-    /// onto the wire directly would only work if a stray reply could be
-    /// discarded as unsolicited; this build's codec instead pairs replies by
-    /// command id off its own send queue, so a line it did not send is a
-    /// block it cannot attribute. The detach therefore goes out as
-    /// [`Gateway::detach`]'s `detach-client`, which is the same ask, paired,
-    /// and answered by the same `%exit` coming back up the same wire to
-    /// collapse the bank. Nothing reaches the gateway's pty except
-    /// through the codec (`crate::tmux`).
-    ///
-    /// winit folds the two Enter keys (the main one and the keypad's) into
-    /// one `NamedKey::Enter` told apart only by `KeyEvent::location`, so
-    /// matching the named key covers both.
-    ///
-    /// Answers whether the key was the gateway's, which on a gateway is
-    /// always.
-    pub(super) fn gateway_key(&mut self, logical: &winit::keyboard::Key) -> bool {
-        use winit::keyboard::{Key, NamedKey};
-
-        if !self.is_gateway_on_air() {
-            return false;
-        }
-        let bank = self.channels.current_bank();
-        if matches!(logical, Key::Named(NamedKey::Enter)) {
-            match self.gateway_mut(bank) {
-                Some(gateway) => gateway.detach(),
-                // The row is a gateway with no client standing only between a
-                // teardown and the collapse that follows it; the bank is going
-                // home already.
-                None => log::debug!("the gateway's Enter found no client on bank {bank}"),
-            }
-        }
-        true
     }
 
     /// `Ctrl+Shift+O`: the tmux window on the air steps to its next pane, as

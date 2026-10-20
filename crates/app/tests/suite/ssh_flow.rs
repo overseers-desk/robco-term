@@ -213,7 +213,7 @@ fn an_ssh_bank_lives_types_and_dies_on_the_glass() {
 }
 
 #[test]
-fn a_tmux_opener_echoed_over_ssh_transports_the_channel_to_a_gateway() {
+fn a_tmux_opener_echoed_over_ssh_raises_a_bank_the_channel_carries() {
     let far = far_side();
     let mut s = surface();
     s.connect_ssh_with(
@@ -226,15 +226,14 @@ fn a_tmux_opener_echoed_over_ssh_transports_the_channel_to_a_gateway() {
     // The far side is an echo, so typing tmux's control-mode opener and the
     // `%session-changed` that says it attached brings the same bytes back as
     // remote output, exactly what a remote tmux -CC prints; the tap on the
-    // SSH channel must detect it and the channel transport to a gateway
-    // holding its SSH slot dark behind it.
+    // SSH channel must detect it, and a tmux bank rise with the channel
+    // standing on its SSH slot as the carrier.
     s.write(b"\x1bP1000p%session-changed $0 one\r\n");
-    pump_until(&mut s, "the transport to a tmux bank", |s| {
-        s.channels().current().is_some_and(|r| r.title.starts_with("tmux -CC"))
+    pump_until(&mut s, "a tmux bank to take the air", |s| {
+        s.channels().manager_of(s.channels().current_bank()).is_some_and(|m| m.is_tmux())
     });
-    let tmux_bank = s.channels().current_bank();
-    assert_ne!(tmux_bank, ssh_bank);
     assert_eq!(s.channels().current_channel(), 1);
+    assert!(s.channels().is_carrier(ssh_bank, 1));
 
     // The gateway's bootstrap went out over the SSH wire: the far side
     // received the client-size and bootstrap commands as channel data.

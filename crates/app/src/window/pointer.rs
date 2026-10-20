@@ -180,7 +180,7 @@ impl TerminalSurface {
             // the middle button's paste goes nowhere -- the glass is still a
             // picture to read and copy from; it is no longer a surface to
             // type at.
-            frozen_glass: self.is_gateway_on_air(),
+            frozen_glass: false,
         }
     }
 

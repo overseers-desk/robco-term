@@ -410,10 +410,13 @@ struct Glass {
 #[derive(Default)]
 struct BankRuntime {
     /// A tmux attachment's client half. The write side is a second handle
-    /// onto the gateway's PTY (`term::Session::control_mode_writer`); the
-    /// read side arrives through the gateway's DCS tap on every
+    /// onto the wire's PTY (`term::Session::control_mode_writer`); the read
+    /// side arrives through the wire's DCS tap on every
     /// [`TerminalSurface::pump`].
     gateway: Option<Gateway<Box<dyn std::io::Write + Send>>>,
+    /// The wire of a bank raised for a session found on a local server:
+    /// the tmux client this surface started, which no row carries.
+    wire: Option<AppSession>,
     /// One SSH connection, whose drop is the disconnect.
     link: Option<Link>,
     /// The answering end of the connection's question channel, drained on the
@@ -1056,25 +1059,14 @@ impl TerminalSurface {
         // decides whether that ends the appliance.
         for (bank, channel) in died {
             log::info!("channel {channel} on bank {bank} exited");
-            if channel == 1 && self.is_tmux(bank) {
-                // A gateway's transport died under it; `session_died` is about
-                // to collapse the bank (`gateway_died`), and a client with no
-                // channel under it has no wire. No client half at all means a
-                // tmux this surface started that never opened its envelope.
-                let had = self
-                    .banks
-                    .get_mut(&bank)
-                    .and_then(|runtime| runtime.gateway.take())
-                    .is_some();
-                if !had {
-                    log::warn!("tmux: bank {bank}'s client died before the protocol opened");
-                }
-                self.forget_bank(bank, !had);
+            if let Some(carried) = self.channels.carried_bank(bank, channel) {
+                self.collapse_bank(carried, true);
             }
             if self.channels.session_died(bank, channel) == Close::CloseWindow {
                 self.eof = true;
             }
         }
+        self.pump_wires();
         // A dead row may have been an SSH bank's last: the model swept the
         // bank, and what the bank ran on follows it here.
         self.sweep_bank_runtimes();
@@ -2030,7 +2022,8 @@ impl TerminalSurface {
         // channel resized only when it came back to the screen would redraw
         // its whole screen at the moment it was looked at -- resizing every
         // channel up front avoids exactly that flicker.
-        for session in self.channels.sessions_mut() {
+        let wires = self.banks.values_mut().filter_map(|r| r.wire.as_mut());
+        for session in self.channels.sessions_mut().chain(wires) {
             if let Err(e) = session.well_resized(size) {
                 log::error!("could not resize the pty: {e}");
             }
@@ -2079,26 +2072,6 @@ impl TerminalSurface {
     /// Send bytes to the channel on the air. Public because a paste, a mouse
     /// report and a test's scripted input all mean the same thing to the child.
     pub fn write(&mut self, bytes: &[u8]) {
-        // The gateway swallows every byte, and that is deliberate rather than
-        // a gap in this path. On frozen glass every byte-producing path is
-        // suppressed one by one: the middle button's paste is a paste like
-        // any other and inert on a gateway, and the pointer is handed a
-        // Shift it did not press so a drag marks the screen instead of
-        // reporting to a program -- nothing the mouse does is written to the
-        // control-mode wire. What is left is the keyboard. Every key the
-        // emulation would encode is held by [`Self::gateway_key`], and the
-        // one key with a meaning goes out as `detach-client`; the shortcut
-        // layer runs earlier still, so `Ctrl+Shift+V` does arrive here, a
-        // paste like the middle button's and swallowed on the same terms.
-        //
-        // So this is the same swallow, for the same reason. Its teeth are
-        // protocol hygiene: the gateway's pty is the control wire,
-        // where tmux reads every line as a command and answers it with a block
-        // the codec never asked for: one stray byte desyncs the pairing queue
-        // for good.
-        if self.is_gateway_on_air() {
-            return;
-        }
         if let Some(session) = self.channels.session_mut() {
             if let Err(e) = session.write(bytes) {
                 log::error!("could not write to the pty: {e}");

@@ -75,13 +75,6 @@ impl TerminalSurface {
             // The last channel anywhere switches the appliance off, which
             // for this surface is the same end its child's exit has.
             Close::CloseWindow => self.eof = true,
-            // A gateway detaches its bank: tmux keeps the session, the channel
-            // comes home when `%exit` echoes back through the pump.
-            Close::Detach(bank) => {
-                if let Some(gateway) = self.gateway_mut(bank) {
-                    gateway.detach();
-                }
-            }
             // A tmux window is tmux's to kill; its row goes when the close
             // notification lands, not here.
             Close::KillWindow { bank, window } => {

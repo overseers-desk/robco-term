@@ -4,7 +4,7 @@
 //! The page is a channel: the chord takes a free home slot with a bare
 //! screen ([`term::TmuxPane`], a grid with no transport), these functions
 //! paint it by escape sequences through its own parser, and the surface
-//! intercepts its keys ahead of the keytab, the shape `gateway_key` set.
+//! intercepts its keys ahead of the keytab.
 //! So the phosphor, the curvature and the cursor all apply for free, and
 //! nothing new is rendered anywhere.
 //!

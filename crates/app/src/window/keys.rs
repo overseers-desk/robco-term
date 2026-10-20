@@ -2,8 +2,8 @@
 //!
 //! One order, and it is not a matter of taste. The window's own shortcuts run
 //! first, because they are the window's; then whatever is standing on the
-//! glass and holding the keyboard (the picker, a question, the find line, a
-//! gateway); then the keytab, which is the authority on every key it binds;
+//! glass and holding the keyboard (the picker, a question, the find line);
+//! then the keytab, which is the authority on every key it binds;
 //! and only then the plain text the platform decoded.
 //!
 //! Fields touched: `modes`, the keyboard modes the keytab encodes against;
@@ -50,7 +50,7 @@ impl TerminalSurface {
         }
         // The destination picker's keyboard, when its page is on the air:
         // a digit connects, Esc steps back, everything else is swallowed
-        // so the page stays put. The `gateway_key` shape.
+        // so the page stays put.
         if self.picker_key(logical) {
             return;
         }
@@ -65,13 +65,6 @@ impl TerminalSurface {
         // typed into and Enter means "the next one" rather than a newline
         // for the child.
         if self.find_key(logical, text, modifiers) {
-            return;
-        }
-        // Then the gateway's own keyboard, which stands between the shortcuts
-        // and the keytab: it holds the focus in the terminal's place, so the
-        // emulation never sees a key at all, while the window's own
-        // shortcuts (above) run before any focused item either way.
-        if self.gateway_key(logical) {
             return;
         }
         let mods = modifiers_from(modifiers);
@@ -123,25 +116,14 @@ impl TerminalSurface {
     /// committed -- as opposed to a report the pointer path sends on a
     /// program's behalf. The view snaps to the live screen first, in one
     /// step rather than a glide: what was typed lands at the bottom, and
-    /// the user has to see it land. A modifier alone, a shortcut the window
-    /// keeps, a key the gateway keyboard holds never reach here, so they
-    /// move nothing; neither does a gateway, where nothing is
-    /// written at all (see [`Self::write`]).
+    /// the user has to see it land. A modifier alone and a shortcut the
+    /// window keeps never reach here, so they move nothing.
     pub(super) fn type_bytes(&mut self, bytes: &[u8]) {
-        if self.is_gateway_on_air() {
-            return;
-        }
         self.wheel_pixels = 0.0;
         if let Some(session) = self.channels.session_mut() {
             self.scroll.to_bottom(session.term_mut());
         }
         self.write(bytes);
-    }
-
-    pub(super) fn is_gateway_on_air(&self) -> bool {
-        self.channels
-            .current()
-            .is_some_and(|row| self.channels.is_gateway(row))
     }
 
     /// The keytab's non-byte actions: `scrollLineUp`, `scrollLineDown`,
