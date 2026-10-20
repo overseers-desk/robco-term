@@ -385,6 +385,7 @@ fn phase_1_a_fresh_attach_populates_a_channel_for_every_window_from_slot_one() {
     pump_until(&mut surface, "the tmux hostname to resolve", |s| {
         s.channels().bank_identity(bank) == Some(format!("tmux -CC # @{host}"))
     });
+    assert_eq!(surface.bank_strips().band, Some(format!("tmux -CC # @{host}")));
 
     // The client-size law, read off its real effect: tmux draws the
     // session's windows at the size the client published. (The session was

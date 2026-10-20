@@ -123,9 +123,9 @@ impl BankStrips {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BankStrips {
     /// Top to bottom, one per engraved key on this page. At most
-    /// `rows_visible`, and fewer on the last page, which stops at the
-    /// channel cap: no key is engraved for a slot that no channel can ever
-    /// take.
+    /// `rows_visible`, one fewer under a band, and fewer on the last page,
+    /// which stops at the channel cap: no key is engraved for a slot that no
+    /// channel can ever take.
     pub rows: Vec<StripRow>,
     /// The bank's identity, read on an unnumbered row above the numbered
     /// ones; `None` on the home bank, which carries no such row.

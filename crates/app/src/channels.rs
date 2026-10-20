@@ -130,6 +130,8 @@ pub struct Row<S> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ViewPage {
     pub bank: BankId,
+    /// The numbered rows one of its pages holds.
+    pub rows: i32,
     /// How many pages this bank unrolls into.
     pub count: i32,
 }
@@ -357,15 +359,17 @@ impl<S> Channels<S> {
 
     /// The pager walks one flattened space over every bank: each
     /// unrolls into as many pages as its slots need, every open slot reachable
-    /// and so is the next free one, the slot a new channel will take.
+    /// and so is the next free one, the slot a new channel will take. A bank
+    /// with an identity heads each page with its band, which costs a row.
     pub fn view_pages(&self, rows_visible: i32) -> Vec<ViewPage> {
-        let rows = rows_visible.max(1);
         self.banks
             .iter()
             .map(|b| {
+                let rows = (rows_visible - i32::from(self.bank_identity(b.id).is_some())).max(1);
                 let span = self.highest_open(b.id).max(self.first_free(b.id)).max(1) as i32;
                 ViewPage {
                     bank: b.id,
+                    rows,
                     // JS `Math.ceil(span / rows)` on two positive integers.
                     count: (span + rows - 1) / rows,
                 }
@@ -1110,12 +1114,12 @@ mod tests {
     fn view_pages_unroll_every_bank_far_enough_to_reach_its_next_free_slot() {
         let mut set = channels();
         // One channel: one page, which still has to reach slot 2.
-        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, count: 1 }]);
+        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 1 }]);
         open(&mut set, 0, 4, 4);
         // Slots 1..4 open, next free 2, so four rows fit one page of four.
-        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, count: 1 }]);
+        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 1 }]);
         open(&mut set, 0, 5, 5);
-        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, count: 2 }]);
+        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 2 }]);
     }
 
     #[test]

@@ -104,20 +104,20 @@ impl BankPager {
         // else reads or reacts to it directly, so a second clamp elsewhere
         // would just repeat this one.
         let mut index = self.page_index.clamp(0, page_count - 1);
-        let mut resolved = (0, 0u32);
+        let mut resolved = (0, 0u32, self.rows_visible);
         for view in &table {
             if index < view.count {
-                resolved = (view.bank, (index * self.rows_visible).max(0) as u32);
+                resolved = (view.bank, (index * view.rows).max(0) as u32, view.rows);
                 break;
             }
             index -= view.count;
         }
-        let (bank, base) = resolved;
+        let (bank, base, rows) = resolved;
         BankView {
             bank,
             base,
             page_count,
-            rows_on_page: (self.rows_visible.max(0) as u32).min(CHANNEL_CAP.saturating_sub(base)),
+            rows_on_page: (rows.max(0) as u32).min(CHANNEL_CAP.saturating_sub(base)),
         }
     }
 
@@ -135,7 +135,7 @@ impl BankPager {
         for view in &table {
             if view.bank == channels.current_bank() {
                 let local = (channels.current_channel().saturating_sub(1) as i32)
-                    .div_euclid(self.rows_visible.max(1));
+                    .div_euclid(view.rows);
                 self.page_index = flat + local.clamp(0, view.count - 1);
                 return;
             }
@@ -198,7 +198,7 @@ impl BankPager {
                 .then(|| (current - view.base - 1) as i32);
         BankStrips {
             rows,
-            band: None,
+            band: channels.bank_identity(view.bank),
             page_index: self.page_index.clamp(0, view.page_count - 1),
             page_count: view.page_count,
             indicator,
@@ -393,6 +393,8 @@ mod tests {
             "the first look establishes the baseline"
         );
         assert!(!bank.refresh(&set));
+        assert_eq!(bank.strips(&set, ChannelIndicator::Glow).band, None);
+        assert_eq!(bank.view(&set).rows_on_page, 3);
         bank.step(-1, &set);
         assert!(bank.refresh(&set), "the pager flipped");
 
@@ -406,6 +408,9 @@ mod tests {
         bank.ensure_visible(&set);
         bank.refresh(&set);
         assert_eq!(bank.view(&set).bank, attachment);
+        // A managed bank's band costs its page a row; home carries none.
+        assert_eq!(bank.strips(&set, ChannelIndicator::Glow).band, set.bank_identity(attachment));
+        assert_eq!(bank.view(&set).rows_on_page, 2);
         set.collapse_bank(attachment);
         assert!(bank.refresh(&set), "the band changed under the numerals");
     }
