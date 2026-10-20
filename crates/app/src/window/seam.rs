@@ -60,22 +60,27 @@ impl TerminalSurface {
         let Some(row) = self.strip_under(position) else {
             return false;
         };
+        // The band is a label: no slot stands behind it.
+        if row.channel == 0 {
+            return true;
+        }
         // A dark slot's press starts a session and carries nothing.
         self.strip_held = row.open;
         self.press_strip(row.channel);
         true
     }
 
-    /// The bank's row whose drawn window is under `position`.
+    /// The bank's row whose drawn window is under `position`; the band's,
+    /// slot 0, where the band is.
     fn strip_under(&self, position: PhysicalPosition<f64>) -> Option<chassis::StripRow> {
         let scale = self.viewport.scale_factor.max(f64::EPSILON);
         let (x, y) = (position.x / scale, position.y / scale);
         let mut strips = self.bank_strips();
-        let row = self
-            .cabinet
-            .as_ref()
-            .and_then(|cabinet| cabinet.strip_at(strips.rows.len(), x, y))?;
-        Some(strips.rows.swap_remove(row))
+        let hit = self.cabinet.as_ref()?.strip_at(&strips, x, y)?;
+        match hit {
+            chassis::StripHit::Band => strips.band_row(),
+            chassis::StripHit::Row(row) => Some(strips.rows.swap_remove(row)),
+        }
     }
 
     /// A motion while a window is held is the drag's: the slot under the

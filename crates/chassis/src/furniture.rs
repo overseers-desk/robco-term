@@ -39,14 +39,9 @@
 //! `app::{channels,bank}`. [`crate::BankStrips`] is the seam between them:
 //! the whole of what the furniture asks the channel model, built by
 //! `app::bank::BankPager::strips` from the real slots and read here. This
-//! module reads channel state nowhere else, and holds none.
-//!
-//! This module shipped its own `ChannelView`/`ChannelSlot` pair while the
-//! channel state machine was still being built elsewhere; the merge
-//! collapsed the two shapes into [`crate::BankStrips`], which is the wider
-//! of the two (it carries the page,
-//! the indicator and where the selector rides as well as the row contents) and
-//! the one the real model already produces.
+//! module reads channel state nowhere else, and holds none. Beside the rows
+//! it carries the page, the indicator, where the selector rides, and the band
+//! a managed bank heads its page with.
 
 use crate::bank::BankGeometry;
 use crate::cabinet::Display;
@@ -300,8 +295,9 @@ pub fn led_grid(
 /// Where one row's display window stands, in the bank column's own
 /// coordinates.
 ///
-/// The rows stack at the content ground, and the strip stands past the
-/// numeral lane and its gap, vertically centred in the row.
+/// The rows stack at the content ground, `row` pitches down (a band's page
+/// starts its numbered rows at 1), and the strip stands past the numeral lane
+/// and its gap, vertically centred in the row.
 ///
 /// Shared by the drawing and the hit test on purpose: the window *is* the
 /// key -- pressing it reaches the channel, so the row carries no separate
@@ -318,19 +314,43 @@ pub fn strip_rect(geometry: &BankGeometry, shell: &ShellMetrics, row: usize) -> 
     Rect::new(strip_x, strip_y, strip_w, strip_h)
 }
 
-/// Which row's window a press at `(x, y)` landed in, both in the bank column's
-/// own coordinates, for a page of `rows` engraved keys.
+/// The band's window, at the first pitch: [`strip_rect`]'s, widened leftward
+/// to [`BankGeometry::band_x`].
+pub fn band_rect(geometry: &BankGeometry, shell: &ShellMetrics) -> Rect {
+    Rect {
+        x: geometry.band_x as f64,
+        width: geometry.band_strip_width as f64,
+        ..strip_rect(geometry, shell, 0)
+    }
+}
+
+/// Which window of a page a press landed in: the band, or a numbered row
+/// counted from the top of the page's `rows`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StripHit {
+    Band,
+    Row(usize),
+}
+
+/// Which window a press at `(x, y)` landed in, both in the bank column's own
+/// coordinates. Under a band the numbered rows stand one pitch lower.
 ///
 /// `None` for a press on the bare plate between or beside the windows: the
 /// row's press area is the display item and not the row.
 pub fn strip_at(
     geometry: &BankGeometry,
     shell: &ShellMetrics,
-    rows: usize,
+    strips: &BankStrips,
     x: f64,
     y: f64,
-) -> Option<usize> {
-    (0..rows).find(|&row| within(strip_rect(geometry, shell, row), x, y))
+) -> Option<StripHit> {
+    let first = usize::from(strips.band.is_some());
+    if first == 1 && within(band_rect(geometry, shell), x, y) {
+        return Some(StripHit::Band);
+    }
+    (0..strips.rows.len())
+        .find(|&row| within(strip_rect(geometry, shell, row + first), x, y))
+        .map(StripHit::Row)
 }
 
 /// Where the pager stands, in the bank column's own coordinates.
@@ -419,6 +439,7 @@ pub fn bank_pieces(
     let plastic = plastic(cfg);
 
     let pager_rect = pager_rect(geometry, shell, bank);
+    let first = usize::from(strips.band.is_some());
 
     // The selector sits at the track's lane, inset by the bank's padding
     // top and bottom, and it is drawn before the rows: the carriage stands
@@ -431,8 +452,8 @@ pub fn bank_pieces(
             (bank.1 - 2.0 * geometry.bank_padding as f64).max(0.0),
         );
         if track.width > 0.0 && track.height > 0.0 {
-            let target =
-                geometry.pointer_y(strips.current_row, pager_rect.y + pager_rect.height / 2.0);
+            let pager_mid = pager_rect.y + pager_rect.height / 2.0;
+            let target = geometry.pointer_y(strips.current_row, first, pager_mid);
             let painting = crate::shells::selector_track(
                 cfg.chassis.shell,
                 plastic,
@@ -445,8 +466,13 @@ pub fn bank_pieces(
         }
     }
 
-    for (i, row) in strips.rows.iter().enumerate() {
-        let strip = strip_rect(geometry, shell, i);
+    // The band first, at the first pitch, then the numbered rows under it.
+    let band = strips.band_row().into_iter().map(|r| (band_rect(geometry, shell), r));
+    let numbered = strips.rows.iter().enumerate();
+    let numbered = numbered.map(|(i, r)| (strip_rect(geometry, shell, i + first), r.clone()));
+    for (strip, row) in band.chain(numbered) {
+        let band_label = (row.label == 0).then_some(row.title.as_str());
+        let characters = band_label.map_or(geometry.characters, |_| geometry.band_characters);
         // The row is the content lane by the shell's row height, and its
         // furniture fills it. The window's rectangle inside that row is
         // computed below from the shared `strip_rect`.
@@ -466,6 +492,7 @@ pub fn bank_pieces(
             cfg.chassis.shell,
             plastic,
             &row.numeral,
+            band_label,
             (row_rect.width, row_rect.height),
             display_rect,
             row.current,
@@ -480,14 +507,16 @@ pub fn bank_pieces(
         // window because the mark is the selector's or the lever's.
         let bright = row.bright;
         match display {
-            Display::Led(kit) => pieces.extend(led_piece(cfg, kit, geometry, strip, row, bright)),
+            Display::Led(kit) => {
+                pieces.extend(led_piece(cfg, kit, geometry, characters, strip, &row, bright))
+            }
             Display::Tape(kit) => {
                 // The well is fixed furniture and is drawn always; the tape
                 // is only there when a channel is. So the chrome goes down
                 // whatever the slot holds, and the label, when there is
                 // one, lies in it.
                 pieces.push(Piece::painted(strip, tape::well_chrome(strip)));
-                pieces.extend(tape_piece(cfg, kit, strip, row, bright));
+                pieces.extend(tape_piece(cfg, kit, strip, &row, bright));
             }
         }
     }
@@ -555,6 +584,7 @@ fn led_piece(
     cfg: &Config,
     kit: &LedMetrics,
     geometry: &BankGeometry,
+    characters: i32,
     strip: Rect,
     row: &StripRow,
     bright: bool,
@@ -562,7 +592,7 @@ fn led_piece(
     // The count the strip was measured at, not the count the settings ask
     // for: in a window too narrow for the configured bank the two part
     // company, and the lamps belong to the width beside them.
-    let characters = geometry.characters.max(0) as u32;
+    let characters = characters.max(0) as u32;
     let lamp_cell_width = kit.lamp_cell_width.max(1) as u32;
     let lamp_cell_height = kit.lamp_cell_height.max(1) as u32;
     let pad_cells_y = geometry.pad_cells_y.max(0) as u32;
@@ -686,7 +716,7 @@ fn tape_piece(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Cabinet;
+    use crate::{paint::Op, Cabinet};
 
     /// The lamp uniforms of a piece the caller knows is an LED window.
     fn led_of(p: &Piece) -> LedMetalParams {
@@ -701,6 +731,7 @@ mod tests {
         let cfg = Config::default();
         let cabinet = Cabinet::from_config(&cfg, 1024.0, 768.0);
         let rows = cabinet.rows_visible() as usize;
+        let page = BankStrips::cold_start(rows);
         let g = cabinet.geometry();
         let shell = crate::shell_metrics(&cfg);
 
@@ -710,22 +741,29 @@ mod tests {
         let third = strip_rect(g, &shell, 2);
         let mid = |r: Rect| (r.x + r.width / 2.0, r.y + r.height / 2.0);
         let (x, y) = mid(third);
-        assert_eq!(cabinet.strip_at(rows, x, y), Some(2));
-        assert_eq!(cabinet.strip_at(rows, third.x, third.y), Some(2));
+        assert_eq!(cabinet.strip_at(&page, x, y), Some(StripHit::Row(2)));
+        let corner = cabinet.strip_at(&page, third.x, third.y);
+        assert_eq!(corner, Some(StripHit::Row(2)));
 
         // The numeral lane to the left of the windows is plate, and a row
         // carries no press area of its own there.
-        assert_eq!(cabinet.strip_at(rows, third.x - 1.0, y), None);
+        assert_eq!(cabinet.strip_at(&page, third.x - 1.0, y), None);
         // ...and so is the air between two rows, where the pitch exceeds the
         // window's own height.
         let fourth = strip_rect(g, &shell, 3);
         assert!(fourth.y > third.y + third.height);
-        assert_eq!(cabinet.strip_at(rows, x, third.y + third.height), None);
+        assert_eq!(cabinet.strip_at(&page, x, third.y + third.height), None);
         // A row past the page's last engraved key is nobody's.
         assert_eq!(
-            cabinet.strip_at(rows, x, mid(strip_rect(g, &shell, rows)).1),
+            cabinet.strip_at(&page, x, mid(strip_rect(g, &shell, rows)).1),
             None
         );
+        // A band takes the first pitch, ending where the rows' windows end.
+        let page = BankStrips { band: Some("tmux -CC # @host".into()), ..page };
+        let band = band_rect(g, &shell);
+        assert!(band.x < third.x && band.x + band.width == third.x + third.width);
+        assert_eq!(cabinet.strip_at(&page, x, mid(band).1), Some(StripHit::Band));
+        assert_eq!(cabinet.strip_at(&page, x, y), Some(StripHit::Row(1)));
     }
 
     /// A press in the pager's left third is PREV, the right third NEXT, and
@@ -838,6 +876,13 @@ mod tests {
         assert_eq!(pager.rect.x, g.content_x as f64);
         assert_eq!(pager.rect.height, 130.0);
         assert_eq!(pager.rect.y + 130.0, 768.0 - 8.0);
+
+        // A band is furniture and a window more, and the rows stand under it.
+        let banded = BankStrips { band: Some("user@host".into()), ..BankStrips::cold_start(3) };
+        let banded = cabinet.furniture(&banded);
+        assert_eq!(banded.len(), 1 + 4 + 2 + 2 * 3 + 1);
+        assert_eq!(banded[6].rect.x, g.band_x as f64 - sx as f64);
+        assert_eq!(banded[8].rect, strip_piece(1).rect);
     }
 
     #[test]
@@ -875,6 +920,13 @@ mod tests {
         let pager: Vec<Pass> = pieces[12..].iter().map(|p| p.pass).collect();
         assert_eq!(pager[0], Pass::Plate, "the pager's rail plate");
         assert!(pager.contains(&Pass::Painted));
+
+        // A band's plate is stamped with its name and throws no lever, whose
+        // retaining screw is a row's one arc.
+        let banded = BankStrips { band: Some("user@host".into()), ..BankStrips::cold_start(1) };
+        let banded = cabinet.furniture(&banded);
+        let arc = |p: &Piece| p.paint.iter().flat_map(|p| &p.ops).any(|o| matches!(o, Op::Arc(_)));
+        assert!(!arc(&banded[1]) && arc(&pieces[1]));
     }
 
     #[test]

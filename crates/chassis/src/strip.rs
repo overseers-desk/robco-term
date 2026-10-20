@@ -31,7 +31,7 @@ use crate::bank::{BankGeometry, ChannelIndicator};
 
 /// One slot of the bank as it is drawn: the numeral printed in the plastic
 /// beside the window, and what the window is showing.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StripRow {
     /// The absolute slot behind the numeral: `page_base + index + 1`. The
     /// press reaches this channel; the numeral does not name it.
@@ -76,11 +76,8 @@ impl StripRow {
 /// open window is bright and the mark is made elsewhere -- by the selector
 /// carriage on the rail, or by the thrown lever. That is the whole of what
 /// `chassis.channel_indicator` does to a *strip*; what it does to the bank's
-/// geometry is [`BankGeometry`]'s lane.
-///
-/// It lives here rather than at the one builder that calls it because the
-/// furniture used to decide it a second time from its own copy of the
-/// indicator; one law, one home.
+/// geometry is [`BankGeometry`]'s lane. The page's builder and
+/// [`BankStrips::band_row`] both ask it here: one law, one home.
 pub fn bright(current: bool, indicator: ChannelIndicator) -> bool {
     current || indicator != ChannelIndicator::Glow
 }
@@ -111,6 +108,7 @@ impl BankStrips {
                     }
                 })
                 .collect(),
+            band: None,
             page_index: 0,
             page_count: 1,
             indicator: ChannelIndicator::Glow,
@@ -129,6 +127,9 @@ pub struct BankStrips {
     /// channel cap: no key is engraved for a slot that no channel can ever
     /// take.
     pub rows: Vec<StripRow>,
+    /// The bank's identity, read on an unnumbered row above the numbered
+    /// ones; `None` on the home bank, which carries no such row.
+    pub band: Option<String>,
     /// Which bank page is showing, and how many there are, for the pager's
     /// own readout.
     pub page_index: i32,
@@ -159,6 +160,17 @@ impl BankStrips {
             .map(|r| r.channel)
             .unwrap_or(0)
     }
+
+    /// The band as a display draws it: no numeral, no slot behind it (0),
+    /// and never the channel on the air.
+    pub fn band_row(&self) -> Option<StripRow> {
+        self.band.as_ref().map(|title| StripRow {
+            title: title.clone(),
+            open: !title.is_empty(),
+            bright: bright(false, self.indicator),
+            ..StripRow::default()
+        })
+    }
 }
 
 impl BankGeometry {
@@ -169,9 +181,10 @@ impl BankGeometry {
     /// `pager_centre_y` is the middle of the pager item in the bank's
     /// coordinates, which is the drawing code's own measure and not one this
     /// crate has: the pager is a shell component whose height only the shell
-    /// knows.
-    pub fn pointer_y(&self, current_row: Option<i32>, pager_centre_y: f64) -> f64 {
-        match current_row {
+    /// knows. `first` is the pitch the page's first numbered row stands at:
+    /// 1 under a band, 0 without.
+    pub fn pointer_y(&self, current_row: Option<i32>, first: usize, pager_centre_y: f64) -> f64 {
+        match current_row.map(|row| row + first as i32) {
             Some(row) => {
                 f64::from(self.top_padding - self.bank_padding)
                     + f64::from(row) * (f64::from(self.row_height) + self.row_spacing)
@@ -209,12 +222,14 @@ mod tests {
         let g = geometry();
         // The annunciator: 61px top padding, 3px bank padding, 43px rows,
         // 2px spacing.
-        let first = g.pointer_y(Some(0), 700.0);
+        let first = g.pointer_y(Some(0), 0, 700.0);
         assert_eq!(first, (61 - 3) as f64 + 43.0 / 2.0);
-        let second = g.pointer_y(Some(1), 700.0);
+        let second = g.pointer_y(Some(1), 0, 700.0);
         assert_eq!(second - first, f64::from(g.row_height) + g.row_spacing);
+        // Under a band, the first numbered row stands a pitch lower.
+        assert_eq!(g.pointer_y(Some(0), 1, 700.0), second);
         // Off the page, it leaves the rail and stands by the pager.
-        assert_eq!(g.pointer_y(None, 700.0), 700.0 - 3.0);
+        assert_eq!(g.pointer_y(None, 1, 700.0), 700.0 - 3.0);
     }
 
     #[test]
@@ -232,6 +247,7 @@ mod tests {
                     ghost: false,
                 })
                 .collect(),
+            band: None,
             page_index: 1,
             page_count: 4,
             indicator: ChannelIndicator::Glow,
@@ -242,5 +258,10 @@ mod tests {
         assert_eq!(strips.absolute_slot(3), 13);
         assert_eq!(strips.absolute_slot(4), 0, "no key is engraved for it");
         assert_eq!(strips.absolute_slot(0), 0);
+        // Home carries no band; a managed bank's is a label, never a slot.
+        assert_eq!(strips.band_row(), None);
+        let band = BankStrips { band: Some("user@host".into()), ..strips }.band_row().unwrap();
+        assert_eq!((band.channel, band.label, band.title.as_str()), (0, 0, "user@host"));
+        assert!(band.open && band.numeral.is_empty() && !band.current && !band.bright);
     }
 }

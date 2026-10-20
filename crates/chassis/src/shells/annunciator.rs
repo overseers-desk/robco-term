@@ -31,6 +31,7 @@ pub mod metrics {
     pub const COLUMN_GAP: i32 = 16;
     /// Right-aligned digit column, holds them off the plate edge.
     pub const NUMERAL_WIDTH: i32 = 46;
+    pub const BAND_RECLAIMS_LANE: bool = true;
     pub const STRIP_PADDING: i32 = 4;
     /// Pins the window pitch at 45 (43 + `ROW_SPACING`).
     pub const MIN_ROW_HEIGHT: i32 = 43;

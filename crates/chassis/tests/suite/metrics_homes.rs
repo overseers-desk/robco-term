@@ -1,15 +1,12 @@
-//! Regression pins: each measure group now has exactly one home for its
+//! Regression pins: each measure group has exactly one home for its
 //! arithmetic, and this file checks that home's two shapes -- the bare
 //! constants/functions, and the composed shape
 //! (`ShellMetrics`/`LedMetrics`/`TapeMetrics` behind `DisplayMetrics`) that
 //! reads them -- against hand-computed expected values, so a copy-paste slip
 //! in the composition (reading the wrong field, dropping a parameter) fails
-//! here even though both shapes now trace to the same source numbers.
+//! here even though both shapes trace to the same source numbers.
 //!
-//! Before each measure group had exactly one home, three homes independently
-//! held each measure group, and this file compared them pairwise to catch
-//! the one drifting while the others didn't. That risk is gone now that
-//! there is one home per group:
+//! One home per group:
 //!
 //! - a shell's metrics are owned by `src/shells/*.rs`'s `metrics` module
 //!   (bare constants), and
@@ -121,6 +118,7 @@ fn the_annunciator_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -159,6 +157,7 @@ fn the_slide_rule_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -198,6 +197,7 @@ fn the_switchboard_shell_metrics_composes_the_bare_constants() {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             // No track anywhere on this panel: the thrown switch is the mark.

@@ -36,6 +36,7 @@ pub mod metrics {
     pub const COLUMN_GAP: i32 = 18;
     /// The folded lane: stamped numeral and the whole switch well.
     pub const NUMERAL_WIDTH: i32 = 170;
+    pub const BAND_RECLAIMS_LANE: bool = false;
     pub const STRIP_PADDING: i32 = 2;
     pub const MIN_ROW_HEIGHT: i32 = 48;
 
@@ -135,6 +136,9 @@ mod row {
     /// The pixel size struck on all three stamped text items.
     pub const NUMERAL_PIXEL_SIZE: f64 = 38.0;
     pub const NUMERAL_LETTER_SPACING: f64 = -2.0;
+    /// A band's name, stamped across the whole plate in place of the switch.
+    pub const BAND_PIXEL_SIZE: f64 = 16.0;
+    pub const BAND_LETTER_SPACING: f64 = -0.5;
 }
 
 /// A riveted plate carrying the stamped numeral and the toggle well, the
@@ -156,9 +160,13 @@ mod row {
 /// and ten blobs per row) has no primitive in this stack (`crate::paint`'s
 /// module doc: gradients, text, one arc), so the face reads as clean metal
 /// rather than as worn.
+///
+/// A band's row is the plate and its rivets with `band_label` stamped across
+/// it: no well and no lever, since nothing there can be thrown.
 pub fn row_furniture(
     plastic: Rgba,
     numeral: &str,
+    band_label: Option<&str>,
     row: (f64, f64),
     current: bool,
     glow: Rgba,
@@ -225,14 +233,24 @@ pub fn row_furniture(
     p.rect(rivet(5.0, plate_rect.height - 10.0));
     p.rect(rivet(plate_rect.width - 10.0, plate_rect.height - 10.0));
 
-    // The stamped numeral, centred in its own lane. Raised paint catching
-    // the light on its face, its strike shadow thrown down and right, and
-    // the paint struck twice a hair apart because the mock's stencil
-    // strokes are heavier than any weight this face carries.
+    // The stamped numeral, or a band's name across the whole plate, centred
+    // in its lane. Raised paint catching the light on its face, its strike
+    // shadow thrown down and right, and the paint struck twice a hair apart
+    // because the mock's stencil strokes are heavier than any weight this
+    // face carries.
     let lane_x = 6.0;
-    let lane_w = (metrics::NUMERAL_CENTER_X as f64 - 8.0) * 2.0 + 4.0;
-    if !numeral.is_empty() {
-        let line_h = numeral_line_height(row::NUMERAL_PIXEL_SIZE);
+    let (text, lane_w, pixel_size, letter_spacing) = match band_label {
+        Some(name) => {
+            let lane_w = metrics::NUMERAL_WIDTH as f64 - 12.0;
+            (name, lane_w, row::BAND_PIXEL_SIZE, row::BAND_LETTER_SPACING)
+        }
+        None => {
+            let lane_w = (metrics::NUMERAL_CENTER_X as f64 - 8.0) * 2.0 + 4.0;
+            (numeral, lane_w, row::NUMERAL_PIXEL_SIZE, row::NUMERAL_LETTER_SPACING)
+        }
+    };
+    if !text.is_empty() {
+        let line_h = numeral_line_height(pixel_size);
         let lane_y = (row_h - line_h) / 2.0;
         let paint = hex_literal_to_color(row::NUMERAL_PAINT);
         let stamped = |dx: f64, dy: f64, color: Rgba, opacity: f32| TextOp {
@@ -241,16 +259,20 @@ pub fn row_furniture(
             y: lane_y + dy,
             width: lane_w,
             align: Align::Center,
-            pixel_size: row::NUMERAL_PIXEL_SIZE,
-            letter_spacing: row::NUMERAL_LETTER_SPACING,
+            pixel_size,
+            letter_spacing,
             bold: true,
-            text: numeral.to_string(),
+            text: text.to_string(),
             color,
             opacity,
         };
         p.text(stamped(1.0, 2.0, hex_literal_to_color("#05060a"), 0.75));
         p.text(stamped(0.0, 0.0, paint, 1.0));
         p.text(stamped(0.8, 0.0, paint, 1.0));
+    }
+    if band_label.is_some() {
+        pieces.push(Piece::painted(PaintRect::new(0.0, 0.0, row_w, row_h), p));
+        return pieces;
     }
 
     // The switch well and everything sunk in it.

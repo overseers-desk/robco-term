@@ -198,6 +198,7 @@ impl BankPager {
                 .then(|| (current - view.base - 1) as i32);
         BankStrips {
             rows,
+            band: None,
             page_index: self.page_index.clamp(0, view.page_count - 1),
             page_count: view.page_count,
             indicator,

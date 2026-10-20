@@ -95,7 +95,9 @@ pub fn plate_region(
 /// else: an amber plate with a machined bezel, a blue chassis with the window
 /// punched straight into it, and a riveted switchboard plate carrying a
 /// stamped numeral over a toggle well. `current` and `glow` reach only the
-/// switchboard, whose lit well is the mark of the channel on the air.
+/// switchboard, whose lit well is the mark of the channel on the air, and
+/// so does `band_label`, the name it stamps across a band's plate; the other
+/// two let a band's window run across their lane instead.
 ///
 /// A list rather than one painting, for that same shell's sake: its row stands
 /// on a `plate_metal` plate of its own, so its furniture is mixed the way its
@@ -109,10 +111,12 @@ pub fn plate_region(
 /// own height would swallow those. The rows are still painted in order, so
 /// a row's overhang lands under the next row's furniture exactly as a
 /// simple top-to-bottom stack puts it.
+#[allow(clippy::too_many_arguments)]
 pub fn row_furniture(
     shell: config::Shell,
     plastic: Rgba,
     numeral: &str,
+    band_label: Option<&str>,
     row: (f64, f64),
     display_rect: PaintRect,
     current: bool,
@@ -144,7 +148,7 @@ pub fn row_furniture(
         )),
         config::Shell::Switchboard => {
             let (top, bottom) = (top, bottom);
-            switchboard::row_furniture(plastic, numeral, row, current, glow)
+            switchboard::row_furniture(plastic, numeral, band_label, row, current, glow)
                 .into_iter()
                 .map(|mut piece| {
                     if let Some(paint) = piece.paint.take() {

@@ -86,6 +86,7 @@ use crate::frame::{self, ChassisStyle, FrameStyle, Param};
 use crate::layout::WindowLayout;
 use crate::metrics::{DisplayMetrics, LedMetrics, ShellMetrics, TapeMetrics};
 use crate::seam::{SeamContext, SeamCursor, SeamDrag};
+use crate::{BankStrips, StripHit};
 use config::Config;
 
 /// Which display kit the strips are cut from.
@@ -520,17 +521,17 @@ impl Cabinet {
         pieces
     }
 
-    /// Which row's window a press at `(x, y)` landed in, both in the bank
-    /// column's own logical pixels, for a page of `rows` engraved keys.
+    /// Which window of `strips` a press at `(x, y)` landed in, both in the
+    /// bank column's own logical pixels.
     ///
     /// The hit test belongs to whoever drew the windows, which is why it is
     /// here and not in the channel model; what to *do* about the press is
     /// `app::bank::BankPager::press`'s (open a dark slot, select an open one).
-    pub fn strip_at(&self, rows: usize, x: f64, y: f64) -> Option<usize> {
+    pub fn strip_at(&self, strips: &BankStrips, x: f64, y: f64) -> Option<StripHit> {
         if !self.is_shown() {
             return None;
         }
-        crate::furniture::strip_at(&self.geometry, &self.shell, rows, x, y)
+        crate::furniture::strip_at(&self.geometry, &self.shell, strips, x, y)
     }
 
     /// Which way a press at `(x, y)` walks the pages, both in the bank

@@ -13,12 +13,8 @@
 //!
 //! # One home per measure group
 //!
-//! Three call sites once read each shell's or display's measures from three
-//! sides and each kept its own answer (bare constants for the drawing
-//! recipes, free functions for the strip raster, and a composed
-//! struct/trait for the bank); a later unification collapsed that back to
-//! one home per measure group, with this module holding only the *composed*
-//! shape the bank reads:
+//! Each measure group has one home, and this module holds only the
+//! *composed* shape the bank reads:
 //!
 //! - a shell's metrics are owned by `crate::shells::{annunciator,
 //!   slide_rule,switchboard}`'s `metrics` module -- bare constants, read
@@ -92,6 +88,8 @@ pub struct ShellMetrics {
     pub row_spacing: f64,
     pub column_gap: i32,
     pub numeral_width: i32,
+    /// A band's window runs across a lane that holds only digits.
+    pub band_reclaims_lane: bool,
     pub strip_padding: i32,
     pub min_row_height: i32,
     /// The rail's width as the shell declares it; the bank zeroes it under a
@@ -151,6 +149,7 @@ impl ShellMetrics {
             row_spacing: 0.0,
             column_gap: 0,
             numeral_width: 0,
+            band_reclaims_lane: false,
             strip_padding: 0,
             min_row_height: 0,
             track_width: 0,
@@ -359,6 +358,7 @@ pub mod shells {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -390,6 +390,7 @@ pub mod shells {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             track_width: m::TRACK_WIDTH,
@@ -418,6 +419,7 @@ pub mod shells {
             row_spacing: m::ROW_SPACING,
             column_gap: m::COLUMN_GAP,
             numeral_width: m::NUMERAL_WIDTH,
+            band_reclaims_lane: m::BAND_RECLAIMS_LANE,
             strip_padding: m::STRIP_PADDING,
             min_row_height: m::MIN_ROW_HEIGHT,
             // No track anywhere on this panel: the thrown switch is the

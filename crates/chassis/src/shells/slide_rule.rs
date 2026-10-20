@@ -33,6 +33,7 @@ pub mod metrics {
     pub const COLUMN_GAP: i32 = 8;
     /// The stamped digits' own width, no blank lane.
     pub const NUMERAL_WIDTH: i32 = 36;
+    pub const BAND_RECLAIMS_LANE: bool = true;
     pub const STRIP_PADDING: i32 = 2;
     pub const MIN_ROW_HEIGHT: i32 = 43;
     /// The chassis draws the rail as fixed furniture, so the bank cuts no
