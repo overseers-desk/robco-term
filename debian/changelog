@@ -1,3 +1,31 @@
+robco-term (0.3.2) unstable; urgency=medium
+
+  * tmux -CC is carried by a channel that stays on its own bank. The
+    channel that runs tmux -CC keeps its slot, title and session, takes
+    neither the air nor a key while attached, and is live again when the
+    attachment ends. The attachment's windows fill a titled bank of their
+    own from slot 1, and no gateway row stands among them.
+  * tmux's protocol stays off the glass: a capture-pane reply carrying
+    escape sequences no longer ends the envelope early and prints the
+    rest of the attach as text.
+  * Alt+Shift+D detaches the tmux attachment on view and closes the SSH
+    connection on view; on the home bank the key reaches the program.
+    Ctrl+Shift+O steps the tmux window on the air to its next pane.
+  * A tmux or SSH bank heads each page with a band naming its identity.
+    Pressing the band raises a card naming the key that lets the bank go,
+    and crossing into such a bank raises a card with its identity.
+  * A tmux window split into panes shows its active pane alone in its
+    channel, takes keys past tmux's bindings, and follows the active pane
+    when tmux moves it. Attaching captures as much of a pane's history as
+    the channel's scrollback holds.
+  * A failed attach logs tmux's message and the reason in %exit at warn.
+    A tmux -CC that never attaches, such as an attach with no server,
+    leaves the shell no bootstrap line to run.
+  * Supported: tmux 3.3 and later; hyperlinks in a tmux window need
+    tmux 3.4.
+
+ -- Weiwu Zhang <a@colourful.land>  Wed, 21 Oct 2026 21:37:32 +1000
+
 robco-term (0.3.1) unstable; urgency=medium
 
   * tmux -CC attach survives a window whose screen holds an OSC 8
