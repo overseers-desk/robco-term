@@ -197,7 +197,7 @@ effects that age them.
 | `font_source` | `"bundled_fonts"` | Present in the schema; nothing in this build reads it. |
 | `font_width` | `1.0` | Cell width as a multiple of the face's own. Bitmap faces want pixel-exact ratios. |
 | `line_spacing` | `0.1` | Extra height per row, as a fraction of the glyph height the face draws. |
-| `margin` | `0.3` | Inset between the type and the bezel. |
+| `margin` | `0.05` | Inset between the type and the bezel. |
 | `frame_size` | `0.1` | The tube's own moulding. Governs only when `general.chassis_shown` is off. |
 | `screen_radius` | `0.1` | Corner radius of that moulding, `4` to `120` pixels across the range. Governs only when `general.chassis_shown` is off. |
 | `frame_color` | `"#cfcfcf"` | As above: the bare tube's moulding. |
@@ -231,8 +231,8 @@ is on air.
 | `shell` | `"annunciator"` | Which kit paints the body: `annunciator`, `slide-rule`, or `switchboard`. Note the hyphen. |
 | `channel_indicator` | `"glow"` | How the bank marks the live channel: `glow`, `pointer`, or `switch`. |
 | `channel_display` | `"led"` | What the bank's channel windows are made of: `led` or `tape`. |
-| `frame_size` | `0.45` | The cabinet's bezel around the glass. |
-| `screen_radius` | `0.44` | Corner radius of that bezel, `4` to `120` pixels across the range. |
+| `frame_size` | `0.3` | The cabinet's bezel around the glass. |
+| `screen_radius` | `0.2` | Corner radius of that bezel, `4` to `120` pixels across the range. |
 | `frame_color` | `"#001735"` | Bezel colour. |
 | `frame_shininess` | `0.3` | How hard the bezel's highlight is. |
 | `bank_font_name` | `"COZETTE_SCALED"` | The face this cabinet letters its channel bank in. Each cabinet carries its own: the lamp cabinets letter their strips in Cozette, and `Switchboard` stamps its tape in Departure Mono. A name matching no bundled face falls back to the kit's own. Bundled faces are listed under `[screen]`'s `font_name`. |

@@ -136,9 +136,9 @@ fn shader_uniform_arithmetic_matches_the_defining_formulas() {
     // `frameSize` scales to 5% of its raw value, times the same screen
     // scale. The raw value is the chassis's while a chassis stands, which
     // the shipped default does, so the screen's own 0.1 above is *not* what
-    // reaches the shader: the chassis's 0.45 is.
+    // reaches the shader: the chassis's 0.3 is.
     assert!(cfg.general.chassis_shown);
-    assert!((get("FrameSize") - 0.45 * 0.05).abs() < 1e-6);
+    assert!((get("FrameSize") - 0.3 * 0.05).abs() < 1e-6);
     // The frame pass takes the same number under its own spelling.
     assert!((get("frameSize") - get("FrameSize")).abs() < 1e-9);
     cfg.general.chassis_shown = false;
@@ -147,7 +147,7 @@ fn shader_uniform_arithmetic_matches_the_defining_formulas() {
 
     // `screenRadius = lint(4, 120, _screenRadius)`, in pixels, and
     // chassis-governed for the same reason.
-    assert!((get("screenRadius") - (4.0 + 116.0 * 0.44)).abs() < 1e-4);
+    assert!((get("screenRadius") - (4.0 + 116.0 * 0.2)).abs() < 1e-4);
 
     // `frameShininess` is halved from its raw value, over the same split
     // again. The frame body reads it as `frameAlpha = 1.0 - frameShininess *

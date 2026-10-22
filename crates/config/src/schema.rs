@@ -263,7 +263,7 @@ impl Default for ScreenSettings {
             font_source: FontSource::BundledFonts,
             font_width: 1.0,
             line_spacing: 0.1,
-            margin: 0.3,
+            margin: 0.05,
             blinking_cursor: false,
             frame_size: 0.1,
             screen_radius: 0.1,

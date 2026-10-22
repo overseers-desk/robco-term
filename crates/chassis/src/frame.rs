@@ -330,8 +330,8 @@ mod tests {
     fn the_derivations_between_the_stored_value_and_the_shader() {
         let cfg = Config::default();
         // The stock chassis profile, as `robco-config` stores it.
-        assert_eq!(cfg.chassis.frame_size, 0.45);
-        assert_eq!(cfg.chassis.screen_radius, 0.44);
+        assert_eq!(cfg.chassis.frame_size, 0.3);
+        assert_eq!(cfg.chassis.screen_radius, 0.2);
         assert_eq!(cfg.chassis.frame_shininess, 0.3);
 
         // A well of exactly 1024x1024 normalises to 1.0, so the scale factor
@@ -339,10 +339,10 @@ mod tests {
         let unit = WindowLayout::new(1024.0, 1024.0, 0.0);
         assert_eq!(unit.normalized_screen_scale(), 1.0);
         let s = FrameScale::build(&cfg, &unit);
-        // 0.45 * 0.05.
-        assert!((s.frame_size - 0.0225).abs() < 1e-6);
-        // lint(4, 120, 0.44) = 4 + 116 * 0.44.
-        assert!((s.screen_radius - 55.04).abs() < 1e-4);
+        // 0.3 * 0.05.
+        assert!((s.frame_size - 0.015).abs() < 1e-6);
+        // lint(4, 120, 0.2) = 4 + 116 * 0.2.
+        assert!((s.screen_radius - 27.2).abs() < 1e-4);
         // 0.3 * 0.5.
         assert!((s.frame_shininess - 0.15).abs() < 1e-6);
         // 0.2 * 0.6 (the stock screen's curvature).

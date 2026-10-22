@@ -146,12 +146,12 @@ fn the_moulding_lands_where_the_geometry_puts_it() {
 
         // The uniform, derived here by hand rather than read back off the
         // thing under test: the stored frame-size setting of the stock
-        // profile (0.45), the `frame_size = frame_size_setting * 0.05`
+        // profile (0.3), the `frame_size = frame_size_setting * 0.05`
         // formula, and the screen scale. Asserting it against what the code
         // produced is what makes the measurement below a check on the
         // derivation and not merely on the shader's use of whatever number
         // it was handed.
-        let fs = 0.45 * 0.05 * layout.normalized_screen_scale() as f32;
+        let fs = 0.3 * 0.05 * layout.normalized_screen_scale() as f32;
         assert!(
             (oracle_params.frame_size - fs).abs() < 1e-6,
             "frameSize derivation: {} vs {fs}",
