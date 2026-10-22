@@ -749,11 +749,11 @@ mod tests {
     /// The frozen v1 default is Default Amber + Annunciator, chassis
     /// shown: `distortion_margin`/`unscaled_frame_size` therefore read
     /// the *chassis*'s frame/radius (0.3/0.2), not the screen's own
-    /// (0.1/0.1), and `config.screen.margin` (0.05) either way, since
+    /// (0.1/0.1), and `config.screen.margin` (0.0) either way, since
     /// margin has no chassis counterpart. Expected values hand-computed
     /// from the formulas above:
     /// `screen_radius = lint(4, 120, 0.2) = 27.2`,
-    /// `margin = lint(1, 40, 0.05) + (1 - 1/sqrt(2)) * 27.2 = 10.916695551725908`,
+    /// `margin = lint(1, 40, 0.0) + (1 - 1/sqrt(2)) * 27.2 = 8.966695551725909`,
     /// `frame_size = 0.3 * 0.05 = 0.015`.
     #[test]
     fn default_config_derives_the_default_margin_and_frame_size() {
@@ -762,7 +762,7 @@ mod tests {
         assert!(approx_eq(screen_radius(&config), 27.2, 1e-9));
         assert!(approx_eq(
             distortion_margin(&config),
-            10.916695551725908,
+            8.966695551725909,
             1e-9
         ));
         assert!(approx_eq(unscaled_frame_size(&config), 0.015, 1e-9));
@@ -782,7 +782,7 @@ mod tests {
         config.general.chassis_shown = false;
         assert!(approx_eq(screen_radius(&config), 15.6, 1e-9));
         assert!(approx_eq(unscaled_frame_size(&config), 0.005, 1e-9));
-        let expected_margin = 1.0 + 39.0 * 0.05 + (1.0 - std::f64::consts::FRAC_1_SQRT_2) * 15.6;
+        let expected_margin = 1.0 + 39.0 * 0.0 + (1.0 - std::f64::consts::FRAC_1_SQRT_2) * 15.6;
         assert!(approx_eq(distortion_margin(&config), expected_margin, 1e-9));
     }
 

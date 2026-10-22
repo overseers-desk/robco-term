@@ -30,15 +30,15 @@ const CELL_W: f64 = 9.0;
 const CELL_H: f64 = 18.0;
 /// The window, in physical pixels at scale factor 1. Wide enough that the
 /// drags below are legal ones: the seam stops where the well would fall
-/// under the eighty columns of this rig's 9 px cell, which is 742 px of the
+/// under the eighty columns of this rig's 9 px cell, which is 738 px of the
 /// window before the bank has taken anything at all.
 const WINDOW_W: u32 = 1440;
 const WINDOW_H: u32 = 768;
 
 /// This rig's well floor: `term::FLOOR_COLS` x `term::FLOOR_ROWS` cells of
-/// 9 x 18, plus the 11 px the default profile's distortion margin takes off
+/// 9 x 18, plus the 9 px the default profile's distortion margin takes off
 /// each edge before any of them are counted.
-const WELL_MINIMUM: (i32, i32) = (720 + 22, 432 + 22);
+const WELL_MINIMUM: (i32, i32) = (720 + 18, 432 + 18);
 
 /// The shipped profile's bank: the annunciator's furniture around twelve
 /// characters of the measured Cozette cell, the face that cabinet letters

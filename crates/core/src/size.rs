@@ -274,7 +274,7 @@ mod tests {
         // floor rather than an estimate of one.
         for scale in [1.0, 1.25, 1.5, 2.0] {
             for cell in [(9.0, 20.0), (12.0, 28.0), (6.0, 13.0)] {
-                for margin in [0.0, 7.3, 10.916695551725908] {
+                for margin in [0.0, 7.3, 8.966695551725909] {
                     let mut v = Viewport::new(0, 0, scale, CellSize::new(cell.0, cell.1));
                     v.margin = margin * scale;
                     let (w, h) = v.well_minimum();
