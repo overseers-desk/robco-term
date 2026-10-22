@@ -19,7 +19,7 @@ so the same bindings are typed there by pressing `Esc` and then the key.
 |---|---|
 | `Alt`+digit | Bring that channel to the screen |
 | `Alt`+`Shift`+digit | Move the channel on screen to that slot |
-| `Ctrl`+`Shift`+`T` | New channel, in the first empty slot above the one on screen |
+| `Ctrl`+`Shift`+`T` | New channel |
 | `Shift`+`Alt`+`T` | Pick where one new channel goes: a page of the configured SSH servers and localhost takes a free slot, a digit connects, `0` takes a destination you type, `Tab` ticks "make this the default connection", `Esc` steps back and then cancels |
 | `Ctrl`+`Shift`+`W` | Close this channel |
 | `Ctrl`+`PageUp` / `PageDown` | Previous / next channel |
@@ -47,7 +47,12 @@ channel has since exited comes back on the first slot it still holds, and one
 holding no channel at all comes back to no signal, where `Ctrl`+`Shift`+`T`
 starts the next one.
 
-`Ctrl`+`Shift`+`T` fills the first empty slot above the channel on screen, and the lowest empty slot when none above is free, so a channel started from past an empty slot left between two groups of channels never falls back into it. Pressing an empty slot starts a channel in it: a shell on the home bank, a new window of the session on a tmux bank, another channel of the connection on an SSH bank.
+`Ctrl`+`Shift`+`T` fills the first empty slot above the channel on screen,
+so an empty slot left between two groups of channels stays empty while the
+group past it grows. Only when no slot above is free does it take the lowest
+empty one. Pressing an empty slot starts a channel in it: a shell on the home
+bank, a new window of the session on a tmux bank, another channel of the
+connection on an SSH bank.
 
 A tmux or SSH bank heads each page with an unnumbered title row reading
 `tmux -CC # @<host>` or `user@host`; the home bank has none. The row is a

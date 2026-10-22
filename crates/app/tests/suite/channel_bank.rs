@@ -184,7 +184,7 @@ fn ctrl_shift_t_opens_a_second_channel_on_the_lowest_free_slot() {
     assert_eq!(
         surface.channels().current_channel(),
         2,
-        "the new channel takes the lowest free slot and the air with it"
+        "the new channel takes the free slot above the one on the air, and the air with it"
     );
     let second = wait_for_prompt(&mut surface);
     assert_ne!(
@@ -565,8 +565,8 @@ fn alt_page_keys_step_within_a_bank_without_moving_the_air() {
     assert_eq!(strips.current_row, None);
 
     // The page on view is the page Ctrl+Shift+T acts on. Both stretches are
-    // the same machine's page here, so the new channel still takes home's
-    // lowest free slot...
+    // the same machine's page here, so the new channel still takes the free
+    // slot above the one on the air...
     character(&mut surface, "t", CTRL_SHIFT);
     assert_eq!(surface.channels().current_channel(), 4);
     // ...and the bank turns back to the channel on the air, which on this

@@ -9,8 +9,9 @@
 //! bank and takes neither the air nor a key while attached; the windows fill
 //! the attachment's bank from slot 1. Each tmux session gets a bank of its
 //! own, and so does each SSH connection. Within a bank a slot whose session has exited goes dark and stays dark: no
-//! renumbering, and a new channel takes the lowest free slot. Rows beyond what
-//! the theme shows keep the pager behaviour (`crate::bank`).
+//! renumbering, and a new channel takes the first free slot above the one on
+//! the air (`Channels::next_slot`). Rows beyond what the theme shows keep the
+//! pager behaviour (`crate::bank`).
 //!
 //! # What is here and what is not
 //!
@@ -372,7 +373,7 @@ impl<S> Channels<S> {
 
     /// The pager walks one flattened space over every bank: each
     /// unrolls into as many pages as its slots need, every open slot reachable
-    /// and so is the next one, the slot a new channel will take. A bank
+    /// and so is the slot a new channel will take. A bank
     /// with an identity heads each page with its band, which costs a row.
     pub fn view_pages(&self, rows_visible: i32) -> Vec<ViewPage> {
         self.banks
@@ -515,9 +516,9 @@ impl<S> Channels<S> {
     }
 
     /// What `Ctrl+Shift+T` asks for. A new channel goes to `view`,
-    /// the bank the user is looking at: on home the next slot with a
-    /// shell in it, on an attachment another window of that session, which is
-    /// the gateway's to give. Returns the bank whose gateway must be asked, or
+    /// the bank the user is looking at: on home the slot `next_slot` names,
+    /// with a shell in it, on an attachment another window of that session,
+    /// which is the gateway's to give. Returns the bank whose gateway must be asked, or
     /// `None` when the shell was opened here.
     ///
     /// The view is the pager's (`crate::bank::BankPager::view`) and is passed
@@ -562,9 +563,9 @@ impl<S> Channels<S> {
 
     /// A tmux window becomes an ordinary channel of its bank. Windows the
     /// attach lists and windows tmux volunteers line up on the lowest free
-    /// slot without taking the air; a window this set asked for lands on the slot
-    /// it was asked for, unless one has filled it since, and takes the air
-    /// outright. The first window needs no greeting: the air of a user
+    /// slot without taking the air; a window this set asked for lands on the
+    /// slot it was asked for, unless one has filled it since, and takes the
+    /// air outright. The first window needs no greeting: the air of a user
     /// standing on a bank with no row is already on slot 1, where that window
     /// lands.
     pub fn open_tmux_window(

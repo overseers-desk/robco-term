@@ -29,10 +29,9 @@ impl TerminalSurface {
     /// give, and on a bank this program manages itself whatever a fresh
     /// window would open on -- the `[ssh]` table's default connection where
     /// there is one, dialled on a bank of its own, and otherwise a shell in
-    /// the first free slot above the one on view
-    /// ([`crate::channels::Channels::next_slot`]). The default is what "where sessions start"
-    /// means, and it means the same thing for the second session as for the
-    /// first.
+    /// the slot [`Channels::next_slot`](crate::channels::Channels::next_slot)
+    /// names. The default is what "where sessions start" means, and it means
+    /// the same thing for the second session as for the first.
     pub fn new_channel(&mut self) {
         // On an SSH bank, another of what you are looking at is another
         // channel of that connection, resolved locally: channel numbering
