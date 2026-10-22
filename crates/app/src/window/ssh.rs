@@ -35,8 +35,9 @@ impl TerminalSurface {
         self.connect_ssh_with(&req, Box::new(KnownHosts::new()));
     }
 
-    /// Another channel on an SSH bank's connection, from its own link.
-    pub(super) fn open_ssh_channel(&mut self, bank: BankId) {
+    /// Another channel on an SSH bank's connection, from its own link, on
+    /// `slot`.
+    pub(super) fn open_ssh_channel(&mut self, bank: BankId, slot: u32) {
         let Some(link) = self
             .banks
             .get(&bank)
@@ -58,7 +59,7 @@ impl TerminalSurface {
         let scrollback = self.session_config.scrollback;
         let clustering = self.grapheme_clustering();
         let wire = WireAdapter::new(handle);
-        self.channels.open_ssh_channel(bank, move || {
+        self.channels.open_ssh_channel(bank, slot, move || {
             Some(ChannelSession::Ssh(SshChannel::new(
                 size,
                 scrollback,

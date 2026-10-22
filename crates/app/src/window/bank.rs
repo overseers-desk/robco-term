@@ -17,7 +17,7 @@
 
 use std::time::Instant;
 
-use crate::channels::{Close, Manager};
+use crate::channels::{BankId, Close, Manager};
 use crate::chord::Chord;
 
 use super::{spawn, TerminalSurface};
@@ -29,7 +29,8 @@ impl TerminalSurface {
     /// give, and on a bank this program manages itself whatever a fresh
     /// window would open on -- the `[ssh]` table's default connection where
     /// there is one, dialled on a bank of its own, and otherwise a shell in
-    /// the lowest free slot. The default is what "where sessions start"
+    /// the first free slot above the one on view
+    /// ([`crate::channels::Channels::next_slot`]). The default is what "where sessions start"
     /// means, and it means the same thing for the second session as for the
     /// first.
     pub fn new_channel(&mut self) {
@@ -39,7 +40,7 @@ impl TerminalSurface {
         // to wait on.
         let view = self.pager.view(&self.channels).bank;
         if self.channels.manager_of(view).is_some_and(Manager::is_ssh) {
-            self.open_ssh_channel(view);
+            self.open_ssh_channel(view, self.channels.next_slot(view));
             self.channel_changed();
             return;
         }
@@ -57,15 +58,34 @@ impl TerminalSurface {
         }
         let (config, size) = (self.session_now(), self.viewport.term_size());
         if let Some(bank) = self.channels.new_channel(view, || spawn(&config, size)) {
-            // The model set the bank's `new_window_pending` flag; the window
-            // tmux answers with will take the air when it lands
-            // (`open_tmux_window`).
-            match self.gateway_mut(bank) {
-                Some(gateway) => gateway.new_window(),
-                None => log::warn!("bank {bank} asked for a window with no gateway standing"),
-            }
+            self.send_window_request(bank);
         }
         self.channel_changed();
+    }
+
+    /// A press on a dark slot of a bank this program does not run shells on:
+    /// the channel it asks for is that bank's, landing on the slot pressed.
+    /// False on a bank whose dark slot takes a shell.
+    pub(super) fn open_managed_slot(&mut self, bank: BankId, slot: u32) -> bool {
+        match self.channels.manager_of(bank) {
+            Some(Manager::Ssh { .. }) => self.open_ssh_channel(bank, slot),
+            Some(Manager::Tmux { .. }) => {
+                self.channels.ask_for_window(bank, slot);
+                self.send_window_request(bank);
+            }
+            Some(Manager::Home) | None => return false,
+        }
+        self.channel_changed();
+        true
+    }
+
+    /// The model has set the bank's `new_window_pending` slot; the window
+    /// tmux answers with lands there and takes the air (`open_tmux_window`).
+    fn send_window_request(&mut self, bank: BankId) {
+        match self.gateway_mut(bank) {
+            Some(gateway) => gateway.new_window(),
+            None => log::warn!("bank {bank} asked for a window with no gateway standing"),
+        }
     }
 
     /// `Ctrl+Shift+W`.

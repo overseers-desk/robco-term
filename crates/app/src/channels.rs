@@ -68,10 +68,11 @@ pub enum Manager {
         /// on a bank the terminal raised for a session it found, whose wire
         /// the surface holds.
         carrier: Option<(BankId, u32)>,
-        /// A window this bank asked tmux for, still on its way: asking for a
-        /// channel puts you in it, so the next window to arrive takes the air
-        /// while the ones tmux volunteers do not.
-        new_window_pending: bool,
+        /// The slot of a window this bank asked tmux for, still on its way:
+        /// asking for a channel puts you in it, so the next window to arrive
+        /// lands there and takes the air while the ones tmux volunteers do
+        /// not.
+        new_window_pending: Option<u32>,
     },
     /// One SSH connection this program owns. Channels are the connection's
     /// own multiplexed channels and fill from slot 1.
@@ -348,6 +349,18 @@ impl<S> Channels<S> {
         (1..=CHANNEL_CAP).find(|n| !taken[*n as usize]).unwrap_or(0)
     }
 
+    /// The slot `Ctrl+Shift+T` takes: the first free one above the slot the
+    /// bank is on, so a dark slot left before a group of channels stays dark
+    /// while the group past it grows, wrapping to the lowest free one when
+    /// nothing above is. A bank standing on a dark slot, at no signal, takes
+    /// that slot. Zero when the bank is full.
+    pub fn next_slot(&self, bank: BankId) -> u32 {
+        let from = self.bank_of(bank).map_or(1, |i| self.banks[i].channel.max(1));
+        (from..=CHANNEL_CAP)
+            .find(|n| self.row_of(bank, *n).is_none())
+            .unwrap_or_else(|| self.first_free(bank))
+    }
+
     pub fn highest_open(&self, bank: BankId) -> u32 {
         self.rows
             .iter()
@@ -359,14 +372,14 @@ impl<S> Channels<S> {
 
     /// The pager walks one flattened space over every bank: each
     /// unrolls into as many pages as its slots need, every open slot reachable
-    /// and so is the next free one, the slot a new channel will take. A bank
+    /// and so is the next one, the slot a new channel will take. A bank
     /// with an identity heads each page with its band, which costs a row.
     pub fn view_pages(&self, rows_visible: i32) -> Vec<ViewPage> {
         self.banks
             .iter()
             .map(|b| {
                 let rows = (rows_visible - i32::from(self.bank_identity(b.id).is_some())).max(1);
-                let span = self.highest_open(b.id).max(self.first_free(b.id)).max(1) as i32;
+                let span = self.highest_open(b.id).max(self.next_slot(b.id)).max(1) as i32;
                 ViewPage {
                     bank: b.id,
                     rows,
@@ -502,7 +515,7 @@ impl<S> Channels<S> {
     }
 
     /// What `Ctrl+Shift+T` asks for. A new channel goes to `view`,
-    /// the bank the user is looking at: on home the lowest free slot with a
+    /// the bank the user is looking at: on home the next slot with a
     /// shell in it, on an attachment another window of that session, which is
     /// the gateway's to give. Returns the bank whose gateway must be asked, or
     /// `None` when the shell was opened here.
@@ -516,10 +529,13 @@ impl<S> Channels<S> {
         view: BankId,
         session: impl FnOnce() -> Option<S>,
     ) -> Option<BankId> {
-        if self.ask_for_window(view) {
+        if self.ask_for_window(view, self.next_slot(view)) {
             return Some(view);
         }
-        self.open_first_free(session);
+        let slot = self.next_slot(0);
+        if slot > 0 {
+            self.open_channel(0, slot, session);
+        }
         None
     }
 
@@ -527,27 +543,30 @@ impl<S> Channels<S> {
     /// rather than by where the pager stands.
     pub fn new_tmux_window(&mut self) -> Option<BankId> {
         let bank = self.current_bank;
-        self.ask_for_window(bank).then_some(bank)
+        self.ask_for_window(bank, self.next_slot(bank)).then_some(bank)
     }
 
-    /// The bank owes itself a window from its gateway. False where this
-    /// program manages the bank, there being no gateway to ask.
-    fn ask_for_window(&mut self, bank: BankId) -> bool {
+    /// The bank owes itself a window from its gateway, to land on `slot`.
+    /// False where this program manages the bank, there being no gateway to
+    /// ask.
+    pub fn ask_for_window(&mut self, bank: BankId, slot: u32) -> bool {
         let Some(Manager::Tmux {
             new_window_pending, ..
         }) = self.manager_mut(bank)
         else {
             return false;
         };
-        *new_window_pending = true;
+        *new_window_pending = Some(slot);
         true
     }
 
-    /// A tmux window becomes an ordinary channel on the lowest free slot of
-    /// its bank. Windows the attach lists and windows tmux volunteers line up
-    /// without taking the air; a window this set asked for takes it outright.
-    /// The first window needs no greeting: the air of a user standing on a
-    /// bank with no row is already on slot 1, where that window lands.
+    /// A tmux window becomes an ordinary channel of its bank. Windows the
+    /// attach lists and windows tmux volunteers line up on the lowest free
+    /// slot without taking the air; a window this set asked for lands on the slot
+    /// it was asked for, unless one has filled it since, and takes the air
+    /// outright. The first window needs no greeting: the air of a user
+    /// standing on a bank with no row is already on slot 1, where that window
+    /// lands.
     pub fn open_tmux_window(
         &mut self,
         bank: BankId,
@@ -556,10 +575,6 @@ impl<S> Channels<S> {
         name: &str,
         session: impl FnOnce() -> Option<S>,
     ) -> bool {
-        let channel = self.first_free(bank);
-        if channel < 1 {
-            return false;
-        }
         let Some(Manager::Tmux {
             new_window_pending, ..
         }) = self.manager_mut(bank)
@@ -567,7 +582,14 @@ impl<S> Channels<S> {
             return false;
         };
         // Whatever arrives next answers the request, and nothing after it does.
-        let asked = mem::take(new_window_pending);
+        let asked = new_window_pending.take();
+        let channel = match asked {
+            Some(slot) if self.row_of(bank, slot).is_none() => slot,
+            _ => self.first_free(bank),
+        };
+        if channel < 1 {
+            return false;
+        }
         let Some(session) = session() else {
             return false;
         };
@@ -578,7 +600,7 @@ impl<S> Channels<S> {
             tmux: Some((window.clone(), pane.clone())),
             session,
         });
-        if asked {
+        if asked.is_some() {
             self.set_current(bank, channel);
         }
         true
@@ -843,16 +865,20 @@ impl<S> Channels<S> {
     }
 
     /// Another channel on an SSH bank: the connection's next multiplexed
-    /// channel, on the lowest free slot, taking the air the way the asked
-    /// window of a tmux bank does. False when the bank is not an SSH one
-    /// or is full to the cap.
-    pub fn open_ssh_channel(&mut self, bank: BankId, make: impl FnOnce() -> Option<S>) -> bool {
+    /// channel, on `channel`, taking the air the way the asked window of a
+    /// tmux bank does. False when the bank is not an SSH one or the slot is
+    /// not a free one.
+    pub fn open_ssh_channel(
+        &mut self,
+        bank: BankId,
+        channel: u32,
+        make: impl FnOnce() -> Option<S>,
+    ) -> bool {
         let Some(Manager::Ssh { host, user, .. }) = self.manager_of(bank) else {
             return false;
         };
         let title = ssh_title(user, host);
-        let channel = self.first_free(bank);
-        if channel < 1 {
+        if !(1..=CHANNEL_CAP).contains(&channel) || self.row_of(bank, channel).is_some() {
             return false;
         }
         let Some(session) = make() else {
@@ -878,7 +904,7 @@ impl<S> Channels<S> {
             manager: Manager::Tmux {
                 host: host.to_string(),
                 carrier,
-                new_window_pending: false,
+                new_window_pending: None,
             },
             channel: 1,
         });
@@ -1004,6 +1030,35 @@ mod tests {
     }
 
     #[test]
+    fn a_new_channel_takes_the_first_free_slot_above_the_one_on_view() {
+        let mut set = channels();
+        open(&mut set, 0, 2, 2);
+        open(&mut set, 0, 5, 5);
+        // From 5, slot 3 stays the dark gap it was left as.
+        assert_eq!(set.new_channel(0, || Some(6)), None);
+        assert_eq!(set.current_channel(), 6);
+        // From 2 the first free slot above is the gap.
+        set.select_channel(0, 2);
+        assert_eq!(set.new_channel(0, || Some(3)), None);
+        assert_eq!(set.current_channel(), 3);
+        // Nothing free above wraps to the lowest free slot.
+        open(&mut set, 0, CHANNEL_CAP, 99);
+        assert_eq!(set.next_slot(0), 4);
+    }
+
+    #[test]
+    fn an_ssh_channel_lands_on_the_slot_asked_and_refuses_a_taken_one() {
+        let mut set = channels();
+        let ssh = set
+            .open_ssh_bank("overseer", "vault", 22, || Some(500))
+            .unwrap();
+        assert!(!set.open_ssh_channel(ssh, 1, || Some(501)));
+        assert!(set.open_ssh_channel(ssh, 4, || Some(504)));
+        assert_eq!(set.on_air(), (ssh, 4));
+        assert_eq!(set.slot_title(ssh, 2), None);
+    }
+
+    #[test]
     fn an_exited_slot_goes_dark_and_stays_dark() {
         let mut set = channels();
         open(&mut set, 0, 2, 2);
@@ -1111,15 +1166,17 @@ mod tests {
     }
 
     #[test]
-    fn view_pages_unroll_every_bank_far_enough_to_reach_its_next_free_slot() {
+    fn view_pages_unroll_every_bank_far_enough_to_reach_its_next_slot() {
         let mut set = channels();
         // One channel: one page, which still has to reach slot 2.
         assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 1 }]);
         open(&mut set, 0, 4, 4);
-        // Slots 1..4 open, next free 2, so four rows fit one page of four.
-        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 1 }]);
-        open(&mut set, 0, 5, 5);
+        // Slots 1 and 4 open with 4 on the air: the next channel takes 5,
+        // which a second page has to reach.
         assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 2 }]);
+        // From slot 1 the next is 2, and one page of four holds it all.
+        set.select_channel(0, 1);
+        assert_eq!(set.view_pages(4), vec![ViewPage { bank: 0, rows: 4, count: 1 }]);
     }
 
     #[test]
@@ -1176,6 +1233,11 @@ mod tests {
         assert_eq!(set.new_tmux_window(), Some(bank));
         assert!(window(&mut set, bank, 3, "asked", 3));
         assert_eq!(set.current_channel(), 3);
+        // A window asked for a dark slot lands on that slot.
+        assert!(set.ask_for_window(bank, 7));
+        assert!(window(&mut set, bank, 5, "pressed", 5));
+        assert_eq!(set.on_air(), (bank, 7));
+        assert_eq!(set.slot_title(bank, 7), Some("pressed"));
     }
 
     /// Leaving a bank and returning finds the channel it was showing.
@@ -1259,7 +1321,7 @@ mod tests {
         let ssh = set
             .open_ssh_bank("overseer", "vault", 22, || Some(500))
             .unwrap();
-        assert!(set.open_ssh_channel(ssh, || Some(501)));
+        assert!(set.open_ssh_channel(ssh, 2, || Some(501)));
         assert_eq!(set.bank_identity(ssh).as_deref(), Some("overseer@vault"));
         let tmux = set.attach(ssh, 2, "remote").unwrap();
         assert_eq!(set.on_air(), (tmux, 1));
@@ -1343,7 +1405,7 @@ mod tests {
         assert!(matches!(
             set.manager_of(bank),
             Some(Manager::Tmux {
-                new_window_pending: true,
+                new_window_pending: Some(_),
                 ..
             })
         ));

@@ -223,13 +223,20 @@ impl TerminalSurface {
     /// A press on one of the bank's strips. The `channel` is
     /// [`chassis::StripRow::channel`], the absolute slot behind
     /// the engraved numeral, so the caller never has to know where the pager
-    /// stands. A dark slot starts a session on it and an open one comes to the
-    /// screen; either way the shell gets the keyboard back, which here it never
-    /// gave up.
+    /// stands. A dark slot starts a session on it -- a shell at home, a window
+    /// of the session on a tmux bank, a channel of the connection on an SSH
+    /// one -- and an open one comes to the screen; either way the shell gets
+    /// the keyboard back, which here it never gave up.
     ///
     /// The hit test is the furniture's: the window *is* the key, and
     /// only whoever drew it knows where it is.
     pub fn press_strip(&mut self, channel: u32) {
+        let view = self.pager.view(&self.channels).bank;
+        if self.channels.slot_title(view, channel).is_none()
+            && self.open_managed_slot(view, channel)
+        {
+            return;
+        }
         let (config, size) = (self.session_now(), self.viewport.term_size());
         let pager = self.pager.clone();
         pager.press(&mut self.channels, channel, || spawn(&config, size));
