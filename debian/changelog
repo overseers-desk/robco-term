@@ -23,8 +23,13 @@ robco-term (0.3.2) unstable; urgency=medium
     leaves the shell no bootstrap line to run.
   * Supported: tmux 3.3 and later; hyperlinks in a tmux window need
     tmux 3.4.
+  * Ctrl+Shift+T takes the first free slot above the one on screen, and
+    the lowest free slot when none above is, so an empty slot left
+    between two groups of channels stays empty as a separator.
+  * Pressing an empty slot on a tmux bank opens a new window of the
+    session there, and on an SSH bank another channel of the connection.
 
- -- Weiwu Zhang <a@colourful.land>  Wed, 21 Oct 2026 21:37:32 +1000
+ -- Weiwu Zhang <a@colourful.land>  Thu, 22 Oct 2026 10:43:31 +1000
 
 robco-term (0.3.1) unstable; urgency=medium
 
