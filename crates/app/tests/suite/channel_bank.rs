@@ -29,12 +29,12 @@ const CELL_W: f32 = 9.0;
 const CELL_H: f32 = 18.0;
 /// Tall enough that the stock bank shows eleven rows, so two-digit keys (10 and
 /// 11) exist on the page and a chord can actually be made to wait for a second
-/// digit. `BankGeometry::rows_visible(730, 130)` on the annunciator over LED:
-/// the 130 is the shell's own pager off the bank's foot
-/// (`Cabinet::pager_height`), which is why the window is 130 px taller than
+/// digit. `BankGeometry::rows_visible(673, 73)` on the annunciator over LED:
+/// the 73 is the shell's own pager off the bank's foot
+/// (`Cabinet::pager_height`), which is why the window is 73 px taller than
 /// the row arithmetic alone would ask for.
 const WINDOW_W: u32 = 720;
-const WINDOW_H: u32 = 730;
+const WINDOW_H: u32 = 673;
 const ROWS_ON_PAGE: u32 = 11;
 
 /// The chord modifier, forked per platform.
@@ -134,7 +134,7 @@ fn title(surface: &TerminalSurface) -> Option<String> {
     app::shell::Surface::title(surface)
 }
 
-/// A point in each of the pager's outer thirds, PREV then NEXT, on the
+/// A point at each end of the pager, PREV then NEXT, on the
 /// surface's own cabinet: the bank it holds has been through the window's
 /// fit, and the press lands on the appliance on screen. The harness runs at
 /// a scale factor of 1, so these are physical pixels as they stand.
@@ -541,8 +541,8 @@ fn alt_page_keys_step_within_a_bank_without_moving_the_air() {
     // A three-key page, so a second page exists as soon as the next free slot
     // is past the first three: paging only unrolls a page far enough to
     // reach the slot a new channel would take.
-    // 370 = the 240 the rows need plus the annunciator pager's 130.
-    let mut surface = surface_of_height(370);
+    // 313 = the 240 the rows need plus the annunciator pager's 73.
+    let mut surface = surface_of_height(313);
     assert_eq!(surface.bank_strips().rows.len(), 3);
     wait_for_prompt(&mut surface);
     character(&mut surface, "t", CTRL_SHIFT);
@@ -588,7 +588,7 @@ fn alt_page_keys_step_within_a_bank_without_moving_the_air() {
 #[test]
 fn a_press_on_the_pagers_keys_walks_the_pages() {
     // The three-key page of the test above, so a second page exists.
-    let mut surface = surface_of_height(370);
+    let mut surface = surface_of_height(313);
     wait_for_prompt(&mut surface);
     character(&mut surface, "t", CTRL_SHIFT);
     character(&mut surface, "t", CTRL_SHIFT);
@@ -667,7 +667,7 @@ fn the_window_title_is_the_channel_on_the_airs() {
 /// current page actually changes -- and at no other time.
 #[test]
 fn a_paged_bank_holds_its_page_across_the_pump_and_a_cross_page_chord_survives() {
-    let mut surface = surface_of_height(370);
+    let mut surface = surface_of_height(313);
     assert_eq!(surface.bank_strips().rows.len(), 3);
     wait_for_prompt(&mut surface);
     character(&mut surface, "t", CTRL_SHIFT);

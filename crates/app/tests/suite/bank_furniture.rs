@@ -212,7 +212,7 @@ fn a_rows_furniture_strikes_its_numeral_and_moulds_its_window() {
 }
 
 #[test]
-fn the_pager_puts_its_two_keys_where_the_mock_measured_them() {
+fn the_pager_puts_its_two_keys_between_the_lower_screws() {
     let gpu = device!();
     let mut chrome = Chrome::new(&gpu.device, gpu::harness::OUTPUT_FORMAT);
 
@@ -228,26 +228,28 @@ fn the_pager_puts_its_two_keys_where_the_mock_measured_them() {
     let out = render_piece(&gpu, &mut chrome, pager, 1.0);
     let px = |x: u32, y: u32| px8(&out, pw, x, y);
 
-    // Two 56px caps, the pair centred in the lane at a 92px spread,
-    // tops 38px into the block.
+    // Two caps 49px in from the lane's ends, as wide as fits between the
+    // lower screws up to 56, tops 51px above the block's foot.
     let width = pager.rect.width;
-    let spread = 92.0f64.min(width - 2.0 * 56.0 - 8.0);
-    let prev_x = ((width - 2.0 * 56.0 - spread) / 2.0) as u32;
-    let next_x = prev_x + 56 + spread as u32;
+    let key_w = 56.0f64.min((width - 2.0 * 49.0 - 12.0) / 2.0);
+    let top = (pager.rect.height - 51.0) as u32;
+    let prev_x = 49;
+    let next_x = (width - 49.0 - key_w) as u32;
+    let mid = (key_w / 2.0) as u32;
     // The key's first ridge is the brightest thing on it (#f7e8c4), two
     // pixels into the cap and two down from its top.
     for x in [prev_x, next_x] {
-        let ridge = px(x + 28, 38 + 3);
+        let ridge = px(x + mid, top + 3);
         assert!(
             ridge[0] > 200 && ridge[1] > 180,
             "no lit ridge on the key at x {x}: {ridge:?}"
         );
         // ...and the cap's front face below the ridges is near-black.
-        let face = px(x + 28, 38 + 30);
+        let face = px(x + mid, top + 30);
         assert!(face[0] < 60, "the cap's front face is not dark: {face:?}");
     }
     // Between the keys is bare plate: the pager draws nothing there.
-    assert_eq!(px(prev_x + 56 + 4, 38 + 20)[3], 0);
+    assert_eq!(px(prev_x + key_w as u32 + 4, top + 20)[3], 0);
 
     // A bank with one page dims the whole rocker to 0.55 rather than
     // hiding it, so the same ridge is there and darker.
@@ -257,8 +259,8 @@ fn the_pager_puts_its_two_keys_where_the_mock_measured_them() {
     let dim_piece = dim_pieces.last().unwrap();
     let (dw, _) = piece_size(dim_piece, 1.0);
     let dim = render_piece(&gpu, &mut chrome, dim_piece, 1.0);
-    let dimmed = px8(&dim, dw, prev_x + 28, 38 + 3)[0];
-    assert!(dimmed < px(prev_x + 28, 38 + 3)[0]);
+    let dimmed = px8(&dim, dw, prev_x + mid, top + 3)[0];
+    assert!(dimmed < px(prev_x + mid, top + 3)[0]);
     assert!(dimmed > 0);
 }
 

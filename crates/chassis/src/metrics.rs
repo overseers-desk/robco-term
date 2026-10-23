@@ -116,22 +116,21 @@ pub struct ShellMetrics {
     pub pager_squeeze_span: f64,
     /// Fixed pixels the pager adds after the squeeze.
     pub pager_extra: i32,
-    /// The content width under which a shell's pager stacks its labels over
-    /// its keys and stands `pager_stacked_height` tall instead; `0.0` is a
-    /// shell whose pager never stacks, which is all but the annunciator.
+    /// The content width under which the pager stacks its labels over its
+    /// keys, `pager_stacked_height` tall; `0.0` never stacks.
     pub pager_stack_below: f64,
     pub pager_stacked_height: f64,
+    /// The share of the pager's width at each end that is a key.
+    pub pager_key_share: f64,
 }
 
 impl ShellMetrics {
     /// The height the pager takes at the bank's foot, for a bank whose rows
     /// have `content_width` to stand in.
     ///
-    /// Two pagers read that width. The slide rule's group is stated at a
-    /// natural span and every measure in it scales by `min(1, width / span)`;
-    /// the annunciator's stacks its labels over its keys in a lane too narrow
-    /// for one line. The switchboard declares a constant and ignores the
-    /// argument.
+    /// Two pagers read that width: the slide rule's scales by
+    /// `min(1, width / span)`, and the annunciator's stacks under
+    /// `pager_stack_below`.
     pub fn pager_height(&self, content_width: i32) -> i32 {
         if (content_width as f64) < self.pager_stack_below {
             return js::round_i32(self.pager_stacked_height) + self.pager_extra;
@@ -173,6 +172,7 @@ impl ShellMetrics {
             pager_extra: 0,
             pager_stack_below: 0.0,
             pager_stacked_height: 0.0,
+            pager_key_share: 0.0,
         }
     }
 }
@@ -381,8 +381,9 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
-            pager_stack_below: p::STACK_BELOW,
+            pager_stack_below: p::stack_below(),
             pager_stacked_height: p::STACKED_HEIGHT,
+            pager_key_share: p::KEY_SHARE,
         }
     }
 
@@ -410,9 +411,10 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
-            // This pager never stacks.
+            // Never stacks; a counter stands between the keys.
             pager_stack_below: 0.0,
             pager_stacked_height: 0.0,
+            pager_key_share: 1.0 / 3.0,
         }
     }
 
@@ -444,9 +446,10 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
-            // This pager never stacks.
+            // Never stacks; a counter stands between the keys.
             pager_stack_below: 0.0,
             pager_stacked_height: 0.0,
+            pager_key_share: 1.0 / 3.0,
         }
     }
 

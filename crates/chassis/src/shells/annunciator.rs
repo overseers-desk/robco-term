@@ -49,26 +49,37 @@ pub mod metrics {
 /// [`crate::metrics::shells::annunciator`] composes these into `ShellMetrics`
 /// without restating them.
 pub mod pager {
-    use super::{KEY_GAP, KEY_WIDTH, LEGEND_ROOM, SCREW_SHOULDER};
+    use super::{legend_widths, KEY_GAP, KEY_WIDTH, MIDDLE, SCREW_SHOULDER};
 
-    /// The pager in one line: 6px of plate over keys 40 tall, centred on the
-    /// lower screws, which stand 39px off the bank's foot and so 31 off this
-    /// item's.
+    /// 6px of plate over keys 40 tall, centred on the lower screws 31px
+    /// above the item's foot.
     pub const NATURAL_HEIGHT: f64 = 57.0;
-    /// The narrowest lane the one line fits: both screws' shoulders, both
-    /// keys with their legends, and 16px of plate between the legends.
-    pub const STACK_BELOW: f64 =
-        2.0 * (SCREW_SHOULDER + KEY_WIDTH + KEY_GAP + LEGEND_ROOM) + 16.0;
-    /// A flat 130, the labels engraved over the keys in a lane narrower than
-    /// [`STACK_BELOW`]. The key tops sit 38px into the block and the plate
-    /// runs on below them, but the item's own height is the constant.
-    pub const STACKED_HEIGHT: f64 = 130.0;
+    /// With the labels' line over the keys.
+    pub const STACKED_HEIGHT: f64 = NATURAL_HEIGHT + 16.0;
+    /// No counter stands between the keys, so each half is a key.
+    pub const KEY_SHARE: f64 = 0.5;
     /// This shell states no `squeeze`: every measure in it is a constant, so
     /// a narrow lane shrinks nothing. Zero is the composed shape's way of
     /// saying "reads no width".
     pub const SQUEEZE_SPAN: f64 = 0.0;
     /// Nothing is added after the (absent) squeeze.
     pub const EXTRA: i32 = 0;
+
+    /// The narrowest lane with room for the labels beside the keys.
+    /// Measured once: the face is fixed for the process, and the metrics are
+    /// composed every frame.
+    pub fn stack_below() -> f64 {
+        static SPAN: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        *SPAN.get_or_init(|| {
+            let [prev, next, left, right] = legend_widths();
+            2.0 * (SCREW_SHOULDER + KEY_WIDTH + KEY_GAP + 8.0)
+                + left
+                + prev
+                + next
+                + right
+                + MIDDLE
+        })
+    }
 }
 
 /// The `chassis_metal` region covers the whole chassis item, no margin of
@@ -303,29 +314,17 @@ pub fn row_furniture(
 }
 
 
-/// The PREV/NEXT rocker at the bank's foot.
+/// The PREV/NEXT rocker at the bank's foot, in the content lane `size`.
 ///
-/// Two ridged key caps ([`channel_button`]) and their labels engraved in the
-/// plate, each with a solid arrow. `width` is the content lane the bank
-/// hands over, and it picks the arrangement:
+/// The keys ([`channel_button`]) stand level with the lower screws, just
+/// inboard of them, narrower where two full keys do not fit. The labels sit
+/// beside the keys, arrows pointing at them, in a lane of
+/// [`pager::stack_below`] or more, and on a line over them in a narrower one.
 ///
-/// - From [`pager::STACK_BELOW`] up, one line between the lower screws: each
-///   key just inboard of its screw, and beside it toward the middle its
-///   label, the arrow between them pointing at the key. The height is
-///   [`pager::NATURAL_HEIGHT`].
-/// - Narrower, the labels stand over the keys with the arrows pointing
-///   outward, and the keys sit above the screws. The height is
-///   [`pager::STACKED_HEIGHT`].
-///
-/// Either height is where the bank's row count came from.
-///
-/// Enabled only when there is more than one page, dimmed to 0.55 opacity
-/// otherwise, which is the whole of what the page count changes here, and
-/// the reason this takes it at all: a single-page bank draws its rocker at
-/// just over half strength, saying without words that the keys do nothing.
+/// Dimmed to 0.55 on a single-page bank, where the keys do nothing.
 pub fn pager(plastic: Rgba, size: (f64, f64), page_count: i32) -> Vec<crate::furniture::Piece> {
     let (width, height) = size;
-    let painting = pager_painting(plastic, width, page_count);
+    let painting = pager_painting(plastic, size, page_count);
     if painting.is_empty() {
         return Vec::new();
     }
@@ -335,7 +334,8 @@ pub fn pager(plastic: Rgba, size: (f64, f64), page_count: i32) -> Vec<crate::fur
     )]
 }
 
-fn pager_painting(plastic: Rgba, width: f64, page_count: i32) -> Painting {
+fn pager_painting(plastic: Rgba, size: (f64, f64), page_count: i32) -> Painting {
+    let (width, height) = size;
     let mut p = Painting::new();
     if width <= 0.0 {
         return p;
@@ -370,49 +370,32 @@ fn pager_painting(plastic: Rgba, width: f64, page_count: i32) -> Painting {
         color: label_color,
         opacity,
     };
-    // Every label and arrow is placed by its own painted width, so the
-    // widths have to be measured before the positions can be worked out.
-    let (prev_w, next_w) = (
-        sans_width("PREV", 15.0, 2.0, true),
-        sans_width("NEXT", 15.0, 2.0, true),
-    );
-    let (left_arrow_w, right_arrow_w) = (
-        sans_width("\u{25C0}", 14.0, 0.0, false),
-        sans_width("\u{25B6}", 14.0, 0.0, false),
-    );
+    let [prev_w, next_w, left_arrow_w, right_arrow_w] = legend_widths();
 
-    let (prev_key_x, next_key_x, key_top) = if width < pager::STACK_BELOW {
-        // The pair stands centred in the lane at up to 92px apart, each
-        // label centred over its key and its arrow outside it.
-        let key_spread = 92.0f64.min(width - 2.0 * KEY_WIDTH - 8.0);
-        let prev_key_x = (width - 2.0 * KEY_WIDTH - key_spread) / 2.0;
-        let next_key_x = prev_key_x + KEY_WIDTH + key_spread;
-        let prev_x = prev_key_x + KEY_WIDTH / 2.0 - prev_w / 2.0;
-        let next_x = next_key_x + KEY_WIDTH / 2.0 - next_w / 2.0;
-        p.text(arrow(prev_x - left_arrow_w - 8.0, 6.0, "\u{25C0}"));
-        p.text(label(prev_x, 5.0, "PREV"));
-        p.text(label(next_x, 5.0, "NEXT"));
-        p.text(arrow(next_x + next_w + 8.0, 6.0, "\u{25B6}"));
-        (prev_key_x, next_key_x, KEY_TOP)
+    let key_width = KEY_WIDTH.min((width - 2.0 * SCREW_SHOULDER - MIDDLE) / 2.0);
+    let prev_key_x = SCREW_SHOULDER;
+    let next_key_x = width - SCREW_SHOULDER - key_width;
+    let key_top = height - pager::NATURAL_HEIGHT + KEY_TOP;
+    if width < pager::stack_below() {
+        let y = key_top - 21.0;
+        let prev_x = prev_key_x + key_width - prev_w;
+        p.text(arrow(prev_x - 8.0 - left_arrow_w, y + 1.0, "\u{25C0}"));
+        p.text(label(prev_x, y, "PREV"));
+        p.text(label(next_key_x, y, "NEXT"));
+        p.text(arrow(next_key_x + next_w + 8.0, y + 1.0, "\u{25B6}"));
     } else {
-        // Each key inboard of its screw keeps it in the outer third of the
-        // lane, where `furniture::pager_at` reads a press as that key's.
-        let prev_key_x = SCREW_SHOULDER;
-        let next_key_x = width - SCREW_SHOULDER - KEY_WIDTH;
-        // A 15px capital's middle sits 9px under its line's top, which
-        // puts the labels' middle on the keys'.
-        let y = LINE_KEY_TOP + KEY_HEIGHT / 2.0 - 9.0;
-        let left_arrow_x = prev_key_x + KEY_WIDTH + KEY_GAP;
+        // A 15px capital's middle sits 9px under its line's top.
+        let y = key_top + KEY_HEIGHT / 2.0 - 9.0;
+        let left_arrow_x = prev_key_x + key_width + KEY_GAP;
         let right_arrow_x = next_key_x - KEY_GAP - right_arrow_w;
         p.text(arrow(left_arrow_x, y + 1.0, "\u{25C0}"));
         p.text(label(left_arrow_x + left_arrow_w + 8.0, y, "PREV"));
         p.text(label(right_arrow_x - 8.0 - next_w, y, "NEXT"));
         p.text(arrow(right_arrow_x, y + 1.0, "\u{25B6}"));
-        (prev_key_x, next_key_x, LINE_KEY_TOP)
-    };
+    }
 
     for x in [prev_key_x, next_key_x] {
-        for mut op in channel_button(plastic, KEY_WIDTH, KEY_HEIGHT).ops {
+        for mut op in channel_button(plastic, key_width, KEY_HEIGHT).ops {
             if let crate::paint::Op::Rect(r) = &mut op {
                 r.rect.x += x;
                 r.rect.y += key_top;
@@ -424,24 +407,29 @@ fn pager_painting(plastic: Rgba, width: f64, page_count: i32) -> Painting {
     p
 }
 
+/// The painted widths of PREV, NEXT, ◀ and ▶.
+fn legend_widths() -> [f64; 4] {
+    [
+        sans_width("PREV", 15.0, 2.0, true),
+        sans_width("NEXT", 15.0, 2.0, true),
+        sans_width("\u{25C0}", 14.0, 0.0, false),
+        sans_width("\u{25B6}", 14.0, 0.0, false),
+    ]
+}
+
 /// The pager's label colour.
 const LABEL_COLOR: &str = "#6a5642";
-/// The key cap's measures and where its top sits in the stacked block.
+/// The key cap's largest width, its height, and its top under the plate.
 const KEY_WIDTH: f64 = 56.0;
 const KEY_HEIGHT: f64 = 40.0;
-const KEY_TOP: f64 = 38.0;
-/// Where the key tops sit in the one line.
-const LINE_KEY_TOP: f64 = 6.0;
-/// The plate the one line leaves at each end of the lane: a lower screw's
-/// inner edge stands at most 43px into the lane at the left, the lane
-/// starting at the bank's 3px padding or further in, and 42 at the right
-/// ([`screw_places`]), and the key keeps at least 9px of air from it.
-const SCREW_SHOULDER: f64 = 52.0;
-/// The air between a key and its arrow in the one line.
+const KEY_TOP: f64 = 6.0;
+/// What each end of the lane keeps for a lower screw, whose inner edge is at
+/// most 43px in at the left and 42 at the right, and 6px of air.
+const SCREW_SHOULDER: f64 = 49.0;
+/// Between a key and the arrow beside it.
 const KEY_GAP: f64 = 10.0;
-/// The room one side's arrow and label are given in the one line: they set
-/// in about 53px of a common sans, and the rest lets a wider one through.
-const LEGEND_ROOM: f64 = 68.0;
+/// The least plate between the rocker's halves.
+const MIDDLE: f64 = 12.0;
 
 /// One pager key, in its own coordinates.
 ///

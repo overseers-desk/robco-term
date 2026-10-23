@@ -133,18 +133,20 @@ fn the_annunciator_shell_metrics_composes_the_bare_constants() {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
-            pager_stack_below: p::STACK_BELOW,
+            pager_stack_below: p::stack_below(),
             pager_stacked_height: p::STACKED_HEIGHT,
+            pager_key_share: p::KEY_SHARE,
         },
     );
     // The bank's foot reads the pager's height, and this pager never
-    // squeezes: a lane too narrow for the one line stacks it at 130, and
-    // from 388 up it is the one line's 57.
-    assert_eq!(p::STACK_BELOW, 388.0);
-    assert_eq!(shells::annunciator().pager_height(180), 130);
-    assert_eq!(shells::annunciator().pager_height(387), 130);
-    assert_eq!(shells::annunciator().pager_height(388), 57);
+    // squeezes: it is the one line's 57 in a lane wide enough for the
+    // labels beside the keys, and 16 more under it for their line over them.
+    let span = p::stack_below();
+    let one_line = shells::annunciator().pager_height(span.ceil() as i32);
+    assert_eq!(one_line, 57);
     assert_eq!(shells::annunciator().pager_height(4000), 57);
+    assert_eq!(shells::annunciator().pager_height(span.ceil() as i32 - 1), 73);
+    assert_eq!(shells::annunciator().pager_height(180), 73);
 }
 
 #[test]
@@ -176,6 +178,7 @@ fn the_slide_rule_shell_metrics_composes_the_bare_constants() {
             pager_extra: p::EXTRA,
             pager_stack_below: 0.0,
             pager_stacked_height: 0.0,
+            pager_key_share: 1.0 / 3.0,
         },
     );
     // The blue shell's rows have 157 px of ground at twelve characters, so
@@ -218,6 +221,7 @@ fn the_switchboard_shell_metrics_composes_the_bare_constants() {
             pager_extra: p::EXTRA,
             pager_stack_below: 0.0,
             pager_stacked_height: 0.0,
+            pager_key_share: 1.0 / 3.0,
         },
     );
     // The one shell whose pager reads its own metrics back: the derivation
