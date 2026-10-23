@@ -30,8 +30,8 @@
 //!   the strip raster all need `dyn DisplayMetrics` for.
 //! - a shell's pager measures are a different concern, so they get a
 //!   different home: `crate::shells::{annunciator,slide_rule,switchboard}`'s
-//!   `pager` module, holding the three measures the bank's foot needs.
-//!   [`ShellMetrics`]'s pager triple reads those, on the same terms as the
+//!   `pager` module, holding the measures the bank's foot needs.
+//!   [`ShellMetrics`]'s pager fields read those, on the same terms as the
 //!   `metrics` ones.
 //!
 //! `tests/suite/metrics_homes.rs` pins each single home's composed shape against
@@ -107,7 +107,7 @@ pub struct ShellMetrics {
     /// The pager's height at the group's natural size: the footprint the
     /// pager takes off the bank's foot before the row-count settle divides
     /// what is left. It is a shell's pager measure rather than its general
-    /// metrics, which is why it is the one field here that reads from a
+    /// metrics, which is why it and the pager fields below read from a
     /// second module per shell.
     pub pager_natural_height: f64,
     /// The content width a shell's pager is drawn at full size for. A pager
@@ -116,16 +116,26 @@ pub struct ShellMetrics {
     pub pager_squeeze_span: f64,
     /// Fixed pixels the pager adds after the squeeze.
     pub pager_extra: i32,
+    /// The content width under which a shell's pager stacks its labels over
+    /// its keys and stands `pager_stacked_height` tall instead; `0.0` is a
+    /// shell whose pager never stacks, which is all but the annunciator.
+    pub pager_stack_below: f64,
+    pub pager_stacked_height: f64,
 }
 
 impl ShellMetrics {
     /// The height the pager takes at the bank's foot, for a bank whose rows
     /// have `content_width` to stand in.
     ///
-    /// Only the slide rule's pager reads that width: its group is stated at a
-    /// natural span and every measure in it scales by `min(1, width / span)`.
-    /// The other two declare a constant and ignore the argument.
+    /// Two pagers read that width. The slide rule's group is stated at a
+    /// natural span and every measure in it scales by `min(1, width / span)`;
+    /// the annunciator's stacks its labels over its keys in a lane too narrow
+    /// for one line. The switchboard declares a constant and ignores the
+    /// argument.
     pub fn pager_height(&self, content_width: i32) -> i32 {
+        if (content_width as f64) < self.pager_stack_below {
+            return js::round_i32(self.pager_stacked_height) + self.pager_extra;
+        }
         let squeeze = if self.pager_squeeze_span > 0.0 && content_width > 0 {
             (content_width as f64 / self.pager_squeeze_span).min(1.0)
         } else {
@@ -161,6 +171,8 @@ impl ShellMetrics {
             pager_natural_height: 0.0,
             pager_squeeze_span: 0.0,
             pager_extra: 0,
+            pager_stack_below: 0.0,
+            pager_stacked_height: 0.0,
         }
     }
 }
@@ -326,7 +338,7 @@ impl DisplayMetrics for TapeMetrics {
 }
 
 /// The three shells' fixed measures, composed from each shell's own
-/// `metrics` module -- and, for the pager triple alone, its `pager` module.
+/// `metrics` module -- and, for the pager fields alone, its `pager` module.
 ///
 /// Only the geometry the bank frame composes lives here; the furniture each
 /// shell draws around it (row plates, pagers, selector tracks, switch wells)
@@ -369,6 +381,8 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
+            pager_stack_below: p::STACK_BELOW,
+            pager_stacked_height: p::STACKED_HEIGHT,
         }
     }
 
@@ -396,6 +410,9 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
+            // This pager never stacks.
+            pager_stack_below: 0.0,
+            pager_stacked_height: 0.0,
         }
     }
 
@@ -427,6 +444,9 @@ pub mod shells {
             pager_natural_height: p::NATURAL_HEIGHT,
             pager_squeeze_span: p::SQUEEZE_SPAN,
             pager_extra: p::EXTRA,
+            // This pager never stacks.
+            pager_stack_below: 0.0,
+            pager_stacked_height: 0.0,
         }
     }
 

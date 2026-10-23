@@ -772,12 +772,39 @@ mod tests {
         );
     }
 
+    /// A bank wide enough for the annunciator's pager in one line stands its
+    /// keys level with the lower screws, between them, and each inside the
+    /// third a press on it is read in.
+    #[test]
+    fn a_wide_banks_pager_keys_sit_between_the_lower_screws() {
+        let mut cfg = Config::default();
+        cfg.general.led_characters = 37;
+        let cabinet = Cabinet::from_config(&cfg, 1400.0, 900.0);
+        let bank = (cabinet.layout().bank.width, cabinet.layout().bank.height);
+        let pager = pager_rect(cabinet.geometry(), &crate::shell_metrics(&cfg), bank);
+        assert!(pager.width >= crate::shells::annunciator::pager::STACK_BELOW);
+        assert_eq!(pager.height, 57.0);
+
+        // The keys are 56 wide, 52 in from the lane's ends, and centred 26
+        // into the block: the lower screws' centre line.
+        let screws = crate::shells::screws(cfg.chassis.shell, bank);
+        let (left, right) = (screws[2].rect, screws[3].rect);
+        let key_y = pager.y + 26.0;
+        assert_eq!(key_y, left.y + left.height / 2.0);
+        assert!(pager.x + 52.0 > left.x + left.width);
+        assert!(pager.x + pager.width - 52.0 < right.x);
+        for x in [52.0, 52.0 + 28.0, 52.0 + 55.0] {
+            assert_eq!(cabinet.pager_at(pager.x + x, key_y), Some(-1));
+            assert_eq!(cabinet.pager_at(pager.x + pager.width - x, key_y), Some(1));
+        }
+    }
+
     #[test]
     fn the_shipped_appliance_puts_a_plate_and_a_strip_per_row_on_the_casting() {
         let cfg = Config::default();
         let cabinet = Cabinet::from_config(&cfg, 1024.0, 768.0);
         let rows = cabinet.rows_visible();
-        // With the annunciator's own 130px pager:
+        // With the annunciator's own 130px pager, stacked in a lane this narrow:
         // floor((768 - 61 - 8 - 130 - 2 + 2) / 45) = floor(569/45) = 12.
         assert_eq!(rows, 12);
 
