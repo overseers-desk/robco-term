@@ -597,7 +597,12 @@ fn led_piece(
         crate::font_source(cfg),
         led::DEFAULT_LED_FONT_NAME,
     )?;
-    let shown = led::visible_text(&row.title, row.open, characters as usize);
+    let shown = led::visible_text(
+        &row.title,
+        row.open,
+        characters as usize,
+        row.marquee as usize,
+    );
     // The top band splits the vertical pad in half, rounded down.
     let source = led_grid(
         entry.data(),
@@ -667,7 +672,8 @@ fn tape_piece(
     // A dark slot shows blank tape, which is a label with no glyph box
     // rather than no label: the stamp still runs over an empty slot.
     let characters = kit.min_characters.max(0) as usize;
-    let shown = tape::visible_text(&row.title, row.open, characters).to_uppercase();
+    let shown =
+        tape::visible_text(&row.title, row.open, characters, row.marquee as usize).to_uppercase();
     let raster = term::fonts::led::led_text_image(entry.data(), raster_size, &shown);
     let (glyph_w, glyph_h) = raster
         .as_ref()

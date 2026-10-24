@@ -52,11 +52,11 @@ fn led_display_composes_the_proven_raster_with_led_matrix() {
         ("LOG", true, true),
         ("LOG", true, false),
         ("01", true, true),
-        ("AUX/deep/session", true, true), // exercises the head-truncation rule
+        ("AUX/deep/session", true, true), // longer than the window: reads from its first letter
     ];
 
     for &(text, powered, bright) in cases {
-        let shown = led::visible_text(text, powered, led::DEFAULT_LED_CHARACTERS as usize);
+        let shown = led::visible_text(text, powered, led::DEFAULT_LED_CHARACTERS as usize, 0);
         let r = term::fonts::led::led_text_image(font.data(), font.pixel_size, shown)
             .expect("non-empty text rasterises");
         let input = raster::to_rgba8(&r);

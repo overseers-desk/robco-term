@@ -229,6 +229,7 @@ impl TerminalSurface {
     /// pressed over another window raises no underline here.
     pub(super) fn on_cursor_left(&mut self) {
         self.pointer_present = false;
+        self.strip_hovered(None);
         self.set_hover(None);
     }
 
@@ -471,6 +472,8 @@ impl TerminalSurface {
         if self.seam_moved(position) {
             return;
         }
+        // A bank window under the pointer rolls its title.
+        self.strip_hovered(Some(position).filter(|&p| self.off_grid(p)));
         // Over the cabinet nothing is under the pointer: no link to
         // underline, no cell to report. A drag begun on the glass still
         // follows the pointer out, to the edge.

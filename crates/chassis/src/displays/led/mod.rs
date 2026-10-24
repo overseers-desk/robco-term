@@ -125,19 +125,26 @@ pub fn spill_margins(implicit_height: f64) -> (i64, i64) {
     )
 }
 
-/// A dark or empty slot shows nothing, and a title longer than the window is
-/// truncated from the head, the tail being the part that names the session.
-pub fn visible_text(text: &str, powered: bool, characters: usize) -> &str {
+/// How long a hovered title holds each step of its roll: one character.
+pub const MARQUEE_STEP: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// A dark or empty slot shows nothing, and a title longer than the window
+/// reads from its first letter. `marquee` is how many characters a hovered
+/// title has rolled left; the roll stops with the last letter at the
+/// window's right edge and holds there.
+pub fn visible_text(text: &str, powered: bool, characters: usize, marquee: usize) -> &str {
     if !powered || text.is_empty() || characters == 0 {
         return "";
     }
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     if chars.len() <= characters {
-        text
-    } else {
-        let start_idx = chars[chars.len() - characters].0;
-        &text[start_idx..]
+        return text;
     }
+    let start = marquee.min(chars.len() - characters);
+    let end = chars
+        .get(start + characters)
+        .map_or(text.len(), |&(i, _)| i);
+    &text[chars[start].0..end]
 }
 
 #[cfg(test)]
@@ -208,12 +215,14 @@ mod tests {
     }
 
     #[test]
-    fn visible_text_truncates_from_the_head() {
-        assert_eq!(visible_text("session/deep/path", true, 4), "path");
-        assert_eq!(visible_text("hi", true, 4), "hi");
-        assert_eq!(visible_text("hi", false, 4), "");
-        assert_eq!(visible_text("", true, 4), "");
-        assert_eq!(visible_text("hi", true, 0), "");
+    fn visible_text_reads_from_the_first_letter_and_rolls_to_the_last() {
+        assert_eq!(visible_text("session/deep/path", true, 4, 0), "sess");
+        assert_eq!(visible_text("session/deep/path", true, 4, 3), "sion");
+        assert_eq!(visible_text("session/deep/path", true, 4, 99), "path");
+        assert_eq!(visible_text("hi", true, 4, 5), "hi");
+        assert_eq!(visible_text("hi", false, 4, 0), "");
+        assert_eq!(visible_text("", true, 4, 0), "");
+        assert_eq!(visible_text("hi", true, 0, 0), "");
     }
 
     #[test]

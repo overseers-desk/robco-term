@@ -8,11 +8,14 @@
 //! Fields touched: `cabinet`, which owns the geometry and the hit tests and
 //! takes a drag on the spot; `seam_press`, the press the seam is holding;
 //! `strip_held` and `strip_target`, a window of the bank being carried and
-//! where it would drop;
+//! where it would drop; `strip_hover` and `strip_rolled`, the window the
+//! pointer rests on and how far its title has rolled;
 //! `pending_led_characters`, what a drag has landed and the settings file
 //! does not carry yet; `seam_cursor`, whether the seam claims the pointer's shape; and
 //! `shell_events`, because the bank's width is the window's minimum-width
 //! hint and only the shell can apply one.
+
+use std::time::Instant;
 
 use chassis::{SeamCursor, SeamUpdate};
 use config::toml::Scalar;
@@ -82,6 +85,41 @@ impl TerminalSurface {
             chassis::StripHit::Band => strips.band_row(),
             chassis::StripHit::Row(row) => Some(strips.rows.swap_remove(row)),
         }
+    }
+
+    /// The pointer resting on a bank window rolls its title from the moment
+    /// it arrived; moving off it, or onto another, starts over.
+    pub(super) fn strip_hovered(&mut self, position: Option<PhysicalPosition<f64>>) {
+        let channel = position
+            .and_then(|p| self.strip_under(p))
+            .map(|row| row.channel)
+            .filter(|&channel| channel != 0);
+        if channel == self.strip_hover.map(|(c, _)| c) {
+            return;
+        }
+        self.strip_hover = channel.map(|c| (c, Instant::now()));
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
+    }
+
+    /// How many characters the hovered title has rolled at `now`, and when
+    /// the next step falls, if the title has letters left to bring in.
+    pub(super) fn strip_roll(&self, now: Instant) -> (u32, Option<Instant>) {
+        let Some((channel, since)) = self.strip_hover else {
+            return (0, None);
+        };
+        let step = chassis::displays::led::MARQUEE_STEP;
+        let rolled = (now.duration_since(since).as_millis() / step.as_millis()) as u32;
+        // The title's length bounds the roll; the window's own width, which
+        // stops it sooner, is the display's to apply.
+        let bank = self.pager.view(&self.channels).bank;
+        let length = self
+            .channels
+            .slot_title(bank, channel)
+            .map_or(0, |title| title.chars().count()) as u32;
+        let next = (rolled < length).then(|| since + step * (rolled + 1));
+        (rolled, next)
     }
 
     /// A motion while a window is held is the drag's: the slot under the

@@ -357,6 +357,12 @@ impl TerminalSurface {
             None => chassis::channel_indicator(&self.base),
         };
         let mut strips = self.pager.strips(&self.channels, indicator);
+        if let Some((channel, _)) = self.strip_hover {
+            let (rolled, _) = self.strip_roll(Instant::now());
+            if let Some(row) = strips.rows.iter_mut().find(|row| row.channel == channel) {
+                row.marquee = rolled;
+            }
+        }
         if let Some(target) = self.strip_target {
             self.ghost_drop(&mut strips, target);
         }

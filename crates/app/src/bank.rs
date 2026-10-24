@@ -187,6 +187,7 @@ impl BankPager {
                         && chassis::strip::bright(current, indicator),
                     current,
                     ghost: false,
+                    marquee: 0,
                 }
             })
             .collect();

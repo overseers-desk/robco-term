@@ -25,7 +25,8 @@
 //! `bright` a display item binds, so they go straight into
 //! [`crate::displays::led::window_colors`] and
 //! [`crate::displays::led::spill_strength`] / [`crate::displays::tape`]'s
-//! `visible_text`. [`StripRow::title`] is the display's `text`.
+//! `visible_text`. [`StripRow::title`] is the display's `text`, and
+//! [`StripRow::marquee`] its roll.
 
 use crate::bank::{BankGeometry, ChannelIndicator};
 
@@ -56,6 +57,9 @@ pub struct StripRow {
     /// What a drag would leave here, shown before the drop: the window
     /// reads dimmer than any open channel's.
     pub ghost: bool,
+    /// Characters the title has rolled left under the pointer, counted from
+    /// its first letter; the display stops the roll at the last.
+    pub marquee: u32,
 }
 
 impl StripRow {
@@ -105,6 +109,7 @@ impl BankStrips {
                         current: i == 0,
                         bright: bright(i == 0, ChannelIndicator::Glow),
                         ghost: false,
+                        marquee: 0,
                     }
                 })
                 .collect(),

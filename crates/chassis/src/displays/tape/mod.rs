@@ -115,8 +115,8 @@ pub fn well_chrome(strip: Rect) -> Painting {
 }
 
 /// Identical truncation rule to the LED strip's, gated by `powered`.
-pub fn visible_text(text: &str, powered: bool, characters: usize) -> &str {
-    super::led::visible_text(text, powered, characters)
+pub fn visible_text(text: &str, powered: bool, characters: usize, marquee: usize) -> &str {
+    super::led::visible_text(text, powered, characters, marquee)
 }
 
 /// The well's implicit width/height. `unit_width` comes from
@@ -176,8 +176,8 @@ mod tests {
 
     #[test]
     fn visible_text_reuses_the_led_truncation_rule() {
-        assert_eq!(visible_text("session/deep/path", true, 4), "path");
-        assert_eq!(visible_text("hi", false, 4), "");
+        assert_eq!(visible_text("session/deep/path", true, 4, 0), "sess");
+        assert_eq!(visible_text("hi", false, 4, 0), "");
     }
 
     #[test]

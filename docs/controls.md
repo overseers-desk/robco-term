@@ -62,6 +62,11 @@ Pressing it raises a card naming the key that lets the bank go,
 raises a card with its identity. On the home bank `Alt`+`Shift`+`D` reaches
 the program as the escape it is.
 
+A channel's title longer than its window reads from the first letter. Rest
+the pointer on the window and the title scrolls left a character at a time
+until its last letter shows, and holds there; moving off brings it back to the
+start.
+
 `Ctrl`+`Shift`+`Left` / `Right` swap the channel on screen with its
 neighbour, and take an empty slot outright. The first slot and the last are
 walls: a step past either leaves the bank as it stands.

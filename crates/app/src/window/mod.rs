@@ -515,6 +515,11 @@ pub struct TerminalSurface {
     strip_held: bool,
     /// The slot a drop would store the held channel on, where it would land.
     strip_target: Option<u32>,
+    /// The slot whose window the pointer rests on, and since when: its title
+    /// rolls from then.
+    strip_hover: Option<(u32, Instant)>,
+    /// The roll the last frame was asked for, so the tick asks once a step.
+    strip_rolled: u32,
     /// What the drag has landed and the settings do not carry yet. The write
     /// happens once, when the button comes up: the cabinet is already at the
     /// new count (`chassis::Cabinet::cursor_moved` takes it on the spot), so
@@ -987,6 +992,8 @@ impl TerminalSurface {
             seam_press: false,
             strip_held: false,
             strip_target: None,
+            strip_hover: None,
+            strip_rolled: 0,
             pending_led_characters: None,
             seam_cursor: false,
             pointer_shape: CursorIcon::Default,
@@ -2405,6 +2412,15 @@ impl Surface for TerminalSurface {
         //
         // Gated on the glass for the reason the effects clock above is: a
         // window with nothing to draw on owes the critters no frames.
+        // A hovered title's roll: a frame each step until the last letter is
+        // in the window, and a wake for the next one.
+        let (rolled, next_step) = self.strip_roll(now);
+        let roll_due = rolled != self.strip_rolled;
+        self.strip_rolled = rolled;
+        if let Some(at) = next_step {
+            wake_at = wake_at.min(at);
+        }
+
         let mut critter_due = false;
         if self.glass.is_some() {
             if self.unattended {
@@ -2444,7 +2460,7 @@ impl Surface for TerminalSurface {
         }
 
         Tick {
-            redraw: output_due || effects_due || critter_due,
+            redraw: output_due || effects_due || critter_due || roll_due,
             wake_at: Some(wake_at),
             finished: false,
         }

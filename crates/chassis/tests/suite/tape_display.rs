@@ -141,6 +141,7 @@ fn tape_display_composes_the_proven_raster_with_tape_label() {
             text,
             true,
             chassis::displays::led::DEFAULT_LED_CHARACTERS as usize,
+            0,
         )
         .to_uppercase();
         let r = term::fonts::led::led_text_image(font.data(), raster_size, &shown)
