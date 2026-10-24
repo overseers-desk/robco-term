@@ -1,3 +1,11 @@
+robco-term (0.3.3) unstable; urgency=medium
+
+  * A channel title longer than its window reads from its first letter.
+    Resting the pointer on the window scrolls the title left until its last
+    letter shows, and it holds there; moving off brings it back.
+
+ -- Weiwu Zhang <a@colourful.land>  Sat, 24 Oct 2026 10:40:31 +1000
+
 robco-term (0.3.2) unstable; urgency=medium
 
   * tmux -CC is carried by a channel that stays on its own bank. The
