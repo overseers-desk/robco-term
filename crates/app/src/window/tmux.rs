@@ -302,6 +302,7 @@ impl TerminalSurface {
         }
 
         let mut collapse = None;
+        let mut landed = false;
         for event in events {
             match event {
                 GatewayEvent::HostChanged(host) => self.channels.host_changed(bank, &host),
@@ -311,18 +312,20 @@ impl TerminalSurface {
                     name,
                     columns,
                     rows,
+                    channel,
                 } => {
                     let size = self.pane_size(columns, rows);
                     let scrollback = self.session_config.scrollback;
                     let clustering = self.grapheme_clustering();
                     let opened =
                         self.channels
-                            .open_tmux_window(bank, &window, &pane, &name, || {
+                            .open_tmux_window(bank, &window, &pane, &name, channel, || {
                                 Some(ChannelSession::TmuxPane(TmuxPane::new(
                                     size, scrollback, clustering,
                                 )))
                             });
                     if opened {
+                        landed = true;
                         gateway.attach_window(&window, &pane, scrollback);
                     } else {
                         // A window added with no free slot to take it stays
@@ -398,9 +401,22 @@ impl TerminalSurface {
             }
         }
 
+        if landed {
+            self.channels.settle_on_open_row(bank);
+        }
+
         if let Some(lost_protocol) = collapse {
             self.collapse_bank(bank, lost_protocol);
         } else {
+            // Wherever the bank's windows stand now, a store or a landing
+            // since the last pump included, tmux holds it for the next attach.
+            gateway.remember_channels(
+                self.channels
+                    .rows()
+                    .iter()
+                    .filter(|r| r.bank == bank)
+                    .filter_map(|r| r.tmux.as_ref().map(|(window, _)| (window, r.channel))),
+            );
             self.banks.entry(bank).or_default().gateway = Some(gateway);
         }
         visible

@@ -224,7 +224,11 @@ The channel you type `tmux -CC` in stays on its own bank as the
 attachment's carrier. Its pty carries the control-mode protocol itself, so
 while the attachment lasts its strip stays dark and it takes no key. The
 session's windows fill a bank of their own from slot 01, under the title
-row. `Alt`+`Shift`+`D` with that bank in view detaches the client, and the
+row. Each window keeps the slot it was left on: the slot is recorded on the
+tmux server as the window's `@robco-term-channel` option, so a later attach,
+from this machine or another, finds the bank as it was arranged, empty slots
+included. A window with no slot recorded, or whose slot another window
+holds, takes the lowest empty one. `Alt`+`Shift`+`D` with that bank in view detaches the client, and the
 carrier comes back live. A client the terminal starts itself, for another
 session it finds on a local server, has no channel: its bank stands on the
 wire alone and goes when the client does. Typing `tmux -CC` at a session

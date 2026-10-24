@@ -39,6 +39,12 @@ use crate::ids::{PaneId, WindowId};
 /// One command per chunk keeps a large paste from building one huge line.
 pub const SEND_KEYS_CHUNK: usize = 256;
 
+/// The window user option holding the slot a window's channel stands on.
+/// It lives in the tmux server beside the window, so a bank arranged here
+/// comes back arranged at the next attach, from whichever machine, and goes
+/// when the window goes.
+pub const CHANNEL_OPTION: &str = "@robco-term-channel";
+
 /// One line of the control protocol, going out.
 ///
 /// Every variant is exactly one wire line and therefore exactly one reply
@@ -58,7 +64,8 @@ pub enum Command {
 
     /// The pane listing shared by the bootstrap and the `%window-add`
     /// re-query: one line per pane, across every window of the session, with
-    /// the size tmux gave the pane.
+    /// the size tmux gave the pane and the window's [`CHANNEL_OPTION`], empty
+    /// where none is set.
     ListPanes,
 
     /// The window listing behind the rename sweep.
@@ -96,6 +103,10 @@ pub enum Command {
 
     /// Ask tmux to let this client go. Teardown follows on `%exit`.
     DetachClient,
+
+    /// Record the slot a window's channel stands on, as its
+    /// [`CHANNEL_OPTION`].
+    SetChannel { window: WindowId, channel: u32 },
 
     /// The client-size law: tell tmux how big this client's screen is. tmux
     /// sizes the windows this client creates from it.
@@ -139,9 +150,10 @@ impl Command {
             ),
             Command::ListPanes => format!(
                 "list-panes -s -F {}",
-                quote_format(
-                    "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}"
-                )
+                quote_format(&format!(
+                    "#{{window_id}} #{{pane_id}} #{{pane_active}} #{{pane_width}} #{{pane_height}} \
+                     #{{{CHANNEL_OPTION}}} #{{window_name}}"
+                ))
             ),
             Command::ListWindows => format!(
                 "list-windows -F {}",
@@ -169,6 +181,9 @@ impl Command {
             Command::KillWindow(window) => format!("kill-window -t {window}"),
             Command::NextPane(window) => format!("select-pane -t {window}.+"),
             Command::DetachClient => "detach-client".to_string(),
+            Command::SetChannel { window, channel } => {
+                format!("set-option -w -t {window} {CHANNEL_OPTION} {channel}")
+            }
             Command::ClientSize { columns, rows } => {
                 format!("refresh-client -C {columns}x{rows}")
             }
@@ -218,7 +233,7 @@ mod tests {
         );
         assert_eq!(
             Command::ListPanes.to_wire(),
-            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##
+            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{@robco-term-channel} #{window_name}""##
         );
         assert_eq!(
             Command::ListSessions.to_wire(),
@@ -265,6 +280,14 @@ mod tests {
         assert_eq!(
             Command::NextPane(WindowId::parse("@7").unwrap()).to_wire(),
             "select-pane -t @7.+"
+        );
+        assert_eq!(
+            Command::SetChannel {
+                window: WindowId::parse("@7").unwrap(),
+                channel: 4
+            }
+            .to_wire(),
+            "set-option -w -t @7 @robco-term-channel 4"
         );
         assert_eq!(
             Command::ClientSize {

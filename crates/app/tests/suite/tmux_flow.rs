@@ -1401,3 +1401,50 @@ fn phase_21_the_pane_chord_steps_a_split_window_to_its_next_pane() {
     });
     assert_eq!(shown(&surface), Some(active()));
 }
+
+/// The bank as the user arranged it outlives the attachment: tmux holds each
+/// window's slot, so a reattach puts every window back where it was left and
+/// a slot left empty as a separator stays empty.
+#[test]
+fn phase_22_a_reattach_finds_the_bank_as_it_was_arranged_gap_included() {
+    if !have_tmux() {
+        return;
+    }
+    let server = Server::start();
+    server.run(&["new-window", "-d", "-t", "one", "-n", "second"]);
+    server.run(&["new-window", "-d", "-t", "one", "-n", "third"]);
+    let mut surface = surface();
+    let bank = attach(&mut surface, &server);
+    let windows = server.windows();
+    assert_eq!(surface.channels().on_air(), (bank, 1));
+    // The first window walks to the end of the bank and one step past it,
+    // leaving slot 3 dark.
+    for _ in 0..3 {
+        surface.move_channel(1);
+    }
+    let arranged = |s: &TerminalSurface, bank: u32| {
+        windows
+            .iter()
+            .map(|w| row_of(s, bank, w).map(|r| r.channel))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(arranged(&surface, bank), vec![Some(4), Some(1), Some(2)]);
+    let held = || {
+        server
+            .run(&["list-windows", "-t", "one", "-F", "#{@robco-term-channel}"])
+            .lines()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    pump_until(&mut surface, "tmux to hold the arrangement", |_| {
+        held() == ["4", "1", "2"]
+    });
+
+    assert!(surface.detach_bank());
+    pump_until(&mut surface, "the bank to collapse", |s| {
+        s.channels().banks().len() == 1
+    });
+    let bank = attach(&mut surface, &server);
+    assert_eq!(arranged(&surface, bank), vec![Some(4), Some(1), Some(2)]);
+    assert_eq!(surface.channels().slot_title(bank, 3), None, "the separator stays dark");
+}

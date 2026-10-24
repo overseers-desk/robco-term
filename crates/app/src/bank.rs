@@ -405,7 +405,7 @@ mod tests {
         let attachment = set.attach(0, 1, "prime").unwrap();
         let window = tmux_cc::WindowId::parse("@1").unwrap();
         let pane = tmux_cc::PaneId::parse("%1").unwrap();
-        set.open_tmux_window(attachment, &window, &pane, "vim", || Some(1));
+        set.open_tmux_window(attachment, &window, &pane, "vim", None, || Some(1));
         bank.ensure_visible(&set);
         bank.refresh(&set);
         assert_eq!(bank.view(&set).bank, attachment);

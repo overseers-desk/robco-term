@@ -7,7 +7,8 @@
 //! channels multiplex over the one wire. An attachment's wire is the pty of
 //! the channel `tmux -CC` was typed in, its carrier, which stays on its own
 //! bank and takes neither the air nor a key while attached; the windows fill
-//! the attachment's bank from slot 1. Each tmux session gets a bank of its
+//! the attachment's bank from slot 1, each on the slot tmux holds for it
+//! where that is free (`tmux_cc::command::CHANNEL_OPTION`). Each tmux session gets a bank of its
 //! own, and so does each SSH connection. Within a bank a slot whose session has exited goes dark and stays dark: no
 //! renumbering, and a new channel takes the first free slot above the one on
 //! the air (`Channels::next_slot`). Rows beyond what the theme shows keep the
@@ -561,19 +562,21 @@ impl<S> Channels<S> {
         true
     }
 
-    /// A tmux window becomes an ordinary channel of its bank. Windows the
-    /// attach lists and windows tmux volunteers line up on the lowest free
-    /// slot without taking the air; a window this set asked for lands on the
-    /// slot it was asked for, unless one has filled it since, and takes the
-    /// air outright. The first window needs no greeting: the air of a user
-    /// standing on a bank with no row is already on slot 1, where that window
-    /// lands.
+    /// A tmux window becomes an ordinary channel of its bank. A window this
+    /// set asked for lands on the slot it was asked for, unless one has
+    /// filled it since, and takes the air outright. Windows the attach lists
+    /// and windows tmux volunteers take the air from no one: each lands on
+    /// `remembered`, the slot tmux holds for it, while that is free, and
+    /// otherwise on the lowest free slot. A bank left standing on a dark slot
+    /// meanwhile, its slot 1 a gap, is the surface's to settle
+    /// ([`Channels::settle_on_open_row`]).
     pub fn open_tmux_window(
         &mut self,
         bank: BankId,
         window: &WindowId,
         pane: &PaneId,
         name: &str,
+        remembered: Option<u32>,
         session: impl FnOnce() -> Option<S>,
     ) -> bool {
         let Some(Manager::Tmux {
@@ -584,8 +587,10 @@ impl<S> Channels<S> {
         };
         // Whatever arrives next answers the request, and nothing after it does.
         let asked = new_window_pending.take();
-        let channel = match asked {
-            Some(slot) if self.row_of(bank, slot).is_none() => slot,
+        let free = |slot: u32| (1..=CHANNEL_CAP).contains(&slot) && self.row_of(bank, slot).is_none();
+        let channel = match (asked, remembered) {
+            (Some(slot), _) if free(slot) => slot,
+            (None, Some(slot)) if free(slot) => slot,
             _ => self.first_free(bank),
         };
         if channel < 1 {
@@ -605,6 +610,25 @@ impl<S> Channels<S> {
             self.set_current(bank, channel);
         }
         true
+    }
+
+    /// A bank on the air at no signal, with windows on it and none asked
+    /// for, takes its first open row: an attach whose slot 1 is a gap shows
+    /// a window rather than the gap.
+    pub fn settle_on_open_row(&mut self, bank: BankId) {
+        let pending = matches!(
+            self.manager_of(bank),
+            Some(Manager::Tmux {
+                new_window_pending: Some(_),
+                ..
+            })
+        );
+        if pending || self.current_bank != bank || self.row_of(bank, self.current_channel()).is_some() {
+            return;
+        }
+        if self.rows.iter().any(|r| r.bank == bank) {
+            self.select_bank(bank);
+        }
     }
 
     fn insert_row(&mut self, row: Row<S>) {
@@ -1004,7 +1028,7 @@ mod tests {
     fn window(set: &mut Channels<u32>, bank: BankId, id: u32, name: &str, mark: u32) -> bool {
         let window = WindowId::parse(&format!("@{id}")).unwrap();
         let pane = PaneId::parse(&format!("%{id}")).unwrap();
-        set.open_tmux_window(bank, &window, &pane, name, || Some(mark))
+        set.open_tmux_window(bank, &window, &pane, name, None, || Some(mark))
     }
 
     #[test]
@@ -1239,6 +1263,49 @@ mod tests {
         assert!(window(&mut set, bank, 5, "pressed", 5));
         assert_eq!(set.on_air(), (bank, 7));
         assert_eq!(set.slot_title(bank, 7), Some("pressed"));
+    }
+
+    /// The slots tmux holds for an attachment's windows come back as they
+    /// were left, gaps and all; a slot already taken falls to the lowest
+    /// free one, and an asked-for window still lands where it was asked.
+    #[test]
+    fn remembered_slots_bring_the_bank_back_as_it_was_left() {
+        let mut set = channels();
+        let bank = set.attach(0, 1, "prime").unwrap();
+        let land = |set: &mut Channels<u32>, id: u32, slot: Option<u32>| {
+            let window = WindowId::parse(&format!("@{id}")).unwrap();
+            let pane = PaneId::parse(&format!("%{id}")).unwrap();
+            set.open_tmux_window(bank, &window, &pane, "w", slot, || Some(id))
+        };
+        assert!(land(&mut set, 1, Some(2)));
+        assert!(land(&mut set, 2, Some(4)));
+        assert_eq!(set.slot_title(bank, 3), None, "the separator stays dark");
+        assert!(land(&mut set, 3, Some(4)));
+        assert_eq!(set.channel_of_window(bank, &WindowId::parse("@3").unwrap()), 1);
+        assert!(land(&mut set, 4, Some(0)));
+        assert_eq!(set.channel_of_window(bank, &WindowId::parse("@4").unwrap()), 3);
+        assert!(set.ask_for_window(bank, 9));
+        assert!(land(&mut set, 5, Some(6)));
+        assert_eq!(set.on_air(), (bank, 9));
+    }
+
+    /// An attach whose slot 1 is a gap comes up on its first window rather
+    /// than at no signal; a slot asked for and still on its way is left be.
+    #[test]
+    fn an_attach_standing_on_a_gap_settles_on_its_first_window() {
+        let mut set = channels();
+        let bank = set.attach(0, 1, "prime").unwrap();
+        let window = WindowId::parse("@1").unwrap();
+        let pane = PaneId::parse("%1").unwrap();
+        set.open_tmux_window(bank, &window, &pane, "w", Some(3), || Some(1));
+        assert_eq!(set.on_air(), (bank, 1));
+        set.settle_on_open_row(bank);
+        assert_eq!(set.on_air(), (bank, 3));
+
+        assert!(set.ask_for_window(bank, 5));
+        set.select_bank(bank);
+        set.settle_on_open_row(bank);
+        assert_eq!(set.on_air(), (bank, 3));
     }
 
     /// Leaving a bank and returning finds the channel it was showing.

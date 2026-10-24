@@ -151,13 +151,16 @@ pub enum GatewayEvent {
     },
     /// A window needs a channel: `channels::Channels::open_tmux_window`,
     /// then [`Gateway::attach_window`] if the slot was granted. The channel's
-    /// screen is the size tmux gave the pane, not the glass's.
+    /// screen is the size tmux gave the pane, not the glass's. `channel` is
+    /// the slot tmux holds for the window ([`tmux_cc::command::CHANNEL_OPTION`]),
+    /// where one is set.
     WindowAdded {
         window: WindowId,
         pane: PaneId,
         name: String,
         columns: u16,
         rows: u16,
+        channel: Option<u32>,
     },
     /// The size tmux now gives the pane this window shows:
     /// `term::TmuxPane::resize` on the window's row.
@@ -228,6 +231,9 @@ pub struct Gateway<W: Write> {
     /// The name each window was last announced under: the rename sweep's
     /// diff base.
     names: HashMap<WindowId, String>,
+    /// The slot tmux holds for each window: [`Gateway::remember_channels`]'
+    /// diff base.
+    channels: HashMap<WindowId, u32>,
     /// Attached panes by pane id: whose gate their `%output` runs.
     panes: HashMap<PaneId, PaneGate>,
 
@@ -273,6 +279,7 @@ impl<W: Write> Gateway<W> {
             intents: HashMap::new(),
             windows: HashMap::new(),
             names: HashMap::new(),
+            channels: HashMap::new(),
             panes: HashMap::new(),
             host: String::new(),
             socket: String::new(),
@@ -540,6 +547,25 @@ impl<W: Write> Gateway<W> {
         );
     }
 
+    /// Where each window's channel stands now: a slot tmux does not already
+    /// hold for its window is written to it, so the next attach finds the
+    /// bank as it was left.
+    pub fn remember_channels<'a>(&mut self, rows: impl IntoIterator<Item = (&'a WindowId, u32)>) {
+        for (window, channel) in rows {
+            if self.channels.get(window) == Some(&channel) {
+                continue;
+            }
+            self.channels.insert(window.clone(), channel);
+            self.command(
+                &Command::SetChannel {
+                    window: window.clone(),
+                    channel,
+                },
+                Intent::Ignore,
+            );
+        }
+    }
+
     // ---- the wire, coming back ---------------------------------------
 
     /// The envelope closed (`ST`) with no `%exit` before it: the gateway
@@ -671,13 +697,15 @@ impl<W: Write> Gateway<W> {
             }
             Intent::ListPanes => {
                 // "<window id> <pane id> <pane active> <width> <height>
-                // <window name>"; the name is the remainder and may hold
+                // <channel> <window name>"; the channel is empty where tmux
+                // holds none, and the name is the remainder and may hold
                 // spaces (cpp:376-394). Names in a listing are format output,
                 // raw on the wire -- only notification names are
                 // vis(3)-escaped.
+                let mut added = Vec::new();
                 for line in block.text() {
-                    let fields: Vec<&str> = line.splitn(6, ' ').collect();
-                    if fields.len() < 6 || fields[2] != "1" {
+                    let fields: Vec<&str> = line.splitn(7, ' ').collect();
+                    if fields.len() < 7 || fields[2] != "1" {
                         continue; // only a window's active pane is shown
                     }
                     let (Some(window), Some(pane), Ok(columns), Ok(rows)) = (
@@ -691,18 +719,30 @@ impl<W: Write> Gateway<W> {
                     if self.windows.contains_key(&window) {
                         continue; // a %window-add re-listing: only the new window is news
                     }
-                    let name = fields[5].to_string();
+                    let channel = fields[5].parse().ok();
+                    let name = fields[6].to_string();
                     self.windows.insert(window.clone(), pane.clone());
                     self.names.insert(window.clone(), name.clone());
+                    if let Some(channel) = channel {
+                        self.channels.insert(window.clone(), channel);
+                    }
                     self.window_size(window.clone());
-                    out.push(GatewayEvent::WindowAdded {
+                    added.push(GatewayEvent::WindowAdded {
                         window,
                         pane,
                         name,
                         columns,
                         rows,
+                        channel,
                     });
                 }
+                // Windows with a slot of their own take it before the rest
+                // fill the lowest free ones around them.
+                added.sort_by_key(|event| match event {
+                    GatewayEvent::WindowAdded { channel, .. } => channel.is_none(),
+                    _ => false,
+                });
+                out.extend(added);
                 if !self.bootstrapped {
                     self.bootstrapped = true;
                     // Renames shouted during the attach burst went unheard,
@@ -994,6 +1034,7 @@ impl<W: Write> Gateway<W> {
                     self.panes.remove(&pane);
                 }
                 self.names.remove(&window);
+                self.channels.remove(&window);
                 out.push(GatewayEvent::WindowClosed { window });
             }
             other => log::debug!("tmux: unhandled notification {other:?}"),
@@ -1147,7 +1188,7 @@ mod tests {
     fn attach<W: Write>(gateway: &mut Gateway<W>) -> Vec<GatewayEvent> {
         let mut events =
             gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
-        events.extend(gateway.advance(reply(1, "@0 %0 1 80 24 bash").as_bytes()));
+        events.extend(gateway.advance(reply(1, "@0 %0 1 80 24  bash").as_bytes()));
         events.extend(gateway.advance(reply(2, "$0 one").as_bytes()));
         events.extend(gateway.advance(reply(3, "@0 bash").as_bytes()));
         events
@@ -1164,7 +1205,7 @@ mod tests {
             wire.lines(),
             vec![
                 r##"display-message -p "#{socket_path} #{pid} #{session_id} #{host_short}""##,
-                r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##,
+                r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{@robco-term-channel} #{window_name}""##,
                 r##"list-sessions -F "#{session_id} #{session_name}""##,
                 "refresh-client -C 80x24",
             ]
@@ -1201,7 +1242,7 @@ mod tests {
     fn a_session_listing_names_the_whole_server_and_the_session_this_client_is_on() {
         let (mut gateway, _wire) = gateway();
         gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
-        gateway.advance(reply(1, "@0 %0 1 80 24 bash").as_bytes());
+        gateway.advance(reply(1, "@0 %0 1 80 24  bash").as_bytes());
         let events = gateway.advance(reply(2, "$0 one\n$3 two three").as_bytes());
         assert_eq!(
             events,
@@ -1262,7 +1303,7 @@ mod tests {
         let mut events =
             gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
         events
-            .extend(gateway.advance(reply(1, "@0 %0 1 80 24 bash\n@1 %1 1 80 24 logs").as_bytes()));
+            .extend(gateway.advance(reply(1, "@0 %0 1 80 24  bash\n@1 %1 1 80 24  logs").as_bytes()));
         // Only active panes make windows; the sweep went out after the
         // first listing.
         assert_eq!(
@@ -1275,6 +1316,7 @@ mod tests {
                     name: "bash".into(),
                     columns: 80,
                     rows: 24,
+                    channel: None,
                 },
                 GatewayEvent::WindowAdded {
                     window: WindowId::parse("@1").unwrap(),
@@ -1282,6 +1324,7 @@ mod tests {
                     name: "logs".into(),
                     columns: 80,
                     rows: 24,
+                    channel: None,
                 },
             ]
         );
@@ -1355,7 +1398,7 @@ mod tests {
         assert!(wire.lines()[0].starts_with("list-panes -s"));
         // The re-listing (command 4) carries both windows; only @1 lands.
         let events =
-            gateway.advance(reply(4, "@0 %0 1 80 24 bash\n@1 %1 1 80 24 fresh").as_bytes());
+            gateway.advance(reply(4, "@0 %0 1 80 24  bash\n@1 %1 1 80 24  fresh").as_bytes());
         assert_eq!(
             events,
             vec![GatewayEvent::WindowAdded {
@@ -1364,8 +1407,42 @@ mod tests {
                 name: "fresh".into(),
                 columns: 80,
                 rows: 24,
+                channel: None,
             }]
         );
+    }
+
+    #[test]
+    fn a_remembered_slot_lands_first_and_only_a_moved_one_is_written() {
+        let (mut gateway, wire) = gateway();
+        gateway.advance(reply(0, "/tmp/tmux-1000/default 4242 $0 prime").as_bytes());
+        let events =
+            gateway.advance(reply(1, "@0 %0 1 80 24  bash\n@1 %1 1 80 24 3 logs").as_bytes());
+        let landed: Vec<_> = events
+            .iter()
+            .filter_map(|e| match e {
+                GatewayEvent::WindowAdded { window, channel, .. } => Some((window.to_string(), *channel)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(landed, vec![("@1".into(), Some(3)), ("@0".into(), None)]);
+
+        wire.clear();
+        let (first, second) = (WindowId::parse("@0").unwrap(), WindowId::parse("@1").unwrap());
+        gateway.remember_channels([(&first, 1), (&second, 3)]);
+        assert_eq!(wire.lines(), vec!["set-option -w -t @0 @robco-term-channel 1"]);
+        wire.clear();
+        gateway.remember_channels([(&first, 3), (&second, 1)]);
+        assert_eq!(
+            wire.lines(),
+            vec![
+                "set-option -w -t @0 @robco-term-channel 3",
+                "set-option -w -t @1 @robco-term-channel 1",
+            ]
+        );
+        wire.clear();
+        gateway.remember_channels([(&first, 3), (&second, 1)]);
+        assert!(wire.lines().is_empty());
     }
 
     /// tmux lays a window out again whenever it resizes it, and the
@@ -1498,7 +1575,7 @@ mod tests {
         gateway.advance(reply(4, "").as_bytes());
         gateway.advance(reply(5, "").as_bytes());
         gateway.advance(b"%window-add @1\r\n");
-        gateway.advance(reply(6, "@0 %0 1 100 30 bash\n@1 %1 1 100 30 fresh").as_bytes());
+        gateway.advance(reply(6, "@0 %0 1 100 30  bash\n@1 %1 1 100 30  fresh").as_bytes());
         assert_eq!(wire.lines().last().unwrap(), "refresh-client -C @1:100x30");
     }
 
@@ -1647,7 +1724,7 @@ mod tests {
         );
         assert_eq!(
             lines[1],
-            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{window_name}""##
+            r##"list-panes -s -F "#{window_id} #{pane_id} #{pane_active} #{pane_width} #{pane_height} #{@robco-term-channel} #{window_name}""##
         );
         assert_eq!(
             lines[2],
