@@ -129,9 +129,10 @@ pub fn spill_margins(implicit_height: f64) -> (i64, i64) {
 pub const MARQUEE_STEP: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// A dark or empty slot shows nothing, and a title longer than the window
-/// reads from its first letter. `marquee` is how many characters a hovered
-/// title has rolled left; the roll stops with the last letter at the
-/// window's right edge and holds there.
+/// reads from its first letter, or from its last where it ends in a path
+/// ([`ends_in_path`]). `marquee` is how many characters a hovered title has
+/// rolled toward its other end; the roll stops with that end in the window
+/// and holds there.
 pub fn visible_text(text: &str, powered: bool, characters: usize, marquee: usize) -> &str {
     if !powered || text.is_empty() || characters == 0 {
         return "";
@@ -140,11 +141,25 @@ pub fn visible_text(text: &str, powered: bool, characters: usize, marquee: usize
     if chars.len() <= characters {
         return text;
     }
-    let start = marquee.min(chars.len() - characters);
+    let room = chars.len() - characters;
+    let start = if ends_in_path(text) {
+        room - marquee.min(room)
+    } else {
+        marquee.min(room)
+    };
     let end = chars
         .get(start + characters)
         .map_or(text.len(), |&(i, _)| i);
     &text[chars[start].0..end]
+}
+
+/// A title whose last word starts at `/` or `~`, as a shell's working
+/// directory does (`~/src`, or bash's stock `user@host: ~/src`): its end is
+/// the part that tells one channel from another.
+pub fn ends_in_path(text: &str) -> bool {
+    text.split_whitespace()
+        .last()
+        .is_some_and(|word| word.starts_with('/') || word.starts_with('~'))
 }
 
 #[cfg(test)]
@@ -223,6 +238,15 @@ mod tests {
         assert_eq!(visible_text("hi", false, 4, 0), "");
         assert_eq!(visible_text("", true, 4, 0), "");
         assert_eq!(visible_text("hi", true, 0, 0), "");
+    }
+
+    #[test]
+    fn a_title_ending_in_a_path_reads_from_its_last_letter_and_rolls_to_the_first() {
+        assert_eq!(visible_text("/usr/local/src", true, 4, 0), "/src");
+        assert_eq!(visible_text("/usr/local/src", true, 4, 3), "cal/");
+        assert_eq!(visible_text("/usr/local/src", true, 4, 99), "/usr");
+        assert_eq!(visible_text("a@host: ~/src/robco", true, 5, 0), "robco");
+        assert_eq!(visible_text("main.rs (~/src) - VIM", true, 4, 0), "main");
     }
 
     #[test]

@@ -4,8 +4,11 @@ robco-term (0.3.4) unstable; urgency=medium
     stands on is kept by the tmux server, so attaching again, here or from
     another machine, puts every window back on its slot, and an empty slot
     left as a separator stays empty.
+  * A channel title that ends in a path, as a shell's working directory
+    does, reads from its last letter, and resting the pointer on it
+    scrolls it back to the first.
 
- -- Weiwu Zhang <a@colourful.land>  Sat, 24 Oct 2026 16:05:09 +1000
+ -- Weiwu Zhang <a@colourful.land>  Sat, 24 Oct 2026 18:54:57 +1000
 
 robco-term (0.3.3) unstable; urgency=medium
 
