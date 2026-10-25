@@ -436,7 +436,7 @@ proc ::rcsettings::ui::form::build_row {g r table key kind label arg page} {
 # The font catalogue, as the dump lists it: the persisted key and the label
 # the terminal shows for it, which are not the same string for the bundled
 # faces (TERMINESS_SCALED prints as "Terminess"). The installed system faces,
-# once fetched, are appended after the bundled ones rather than merged by
+# once fetched and while offered, are appended after the bundled ones, not by
 # name: a system install sharing a bundled face's own name is still a
 # different key, and only position (not the printed words) tells the two
 # apart, the same reasoning on_pick already relies on.
@@ -449,8 +449,8 @@ proc ::rcsettings::ui::form::font_column {i} {
     foreach f [::rcsettings::model::fonts] {
         lappend out [lindex $f $i]
     }
-    foreach f $SystemFonts { lappend out [lindex $f $i] }
-    return $out
+    if {[::rcsettings::model::effective screen font_source] ne "system_fonts"} { return $out }
+    return [concat $out [lmap f $SystemFonts { lindex $f $i }]]
 }
 
 proc ::rcsettings::ui::form::font_keys {} { return [font_column 0] }
@@ -596,7 +596,7 @@ proc ::rcsettings::ui::form::on_toggle {id} {
     # The checkbox only ever sits on the Screen page, so opting in while
     # looking at it is opting in while the tab the fetch is gated on is
     # already the one showing: no need to ask the notebook which tab this is.
-    if {$id eq "screen.font_source"} { maybe_fetch_system_fonts screen }
+    if {$id eq "screen.font_source"} { maybe_fetch_system_fonts screen; update_font_combos }
 }
 
 proc ::rcsettings::ui::form::on_pick {id} {
