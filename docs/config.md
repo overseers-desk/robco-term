@@ -194,7 +194,7 @@ effects that age them.
 | `screen_curvature` | `0.2` | How far the tube bulges. Also what your clicks are mapped back through, so selection follows the curve. |
 | `rasterization` | `"no_rasterization"` | Which scanline/pixel grid is laid over the type. One of `no_rasterization`, `scanline_rasterization`, `pixel_rasterization`, `subpixel_rasterization`, `modern_rasterization`. |
 | `font_name` | `"TERMINESS_SCALED"` | The glyph face, by catalogue key (see below). A key naming nothing falls back to the shipped default rather than refusing to draw. |
-| `font_source` | `"bundled_fonts"` | Present in the schema; nothing in this build reads it. |
+| `font_source` | `"bundled_fonts"` | `bundled_fonts` or `system_fonts`. Under `system_fonts`, `font_name` and `chassis.bank_font_name` may also name an installed face by its family name, and the terminal walks the machine's font directories at startup to resolve it. Under `bundled_fonts` it walks them only when it meets a character no bundled face covers. |
 | `font_width` | `1.0` | Cell width as a multiple of the face's own. Bitmap faces want pixel-exact ratios. |
 | `line_spacing` | `0.1` | Extra height per row, as a fraction of the glyph height the face draws. |
 | `margin` | `0.0` | Inset between the type and the bezel. |
