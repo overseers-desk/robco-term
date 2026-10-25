@@ -40,6 +40,13 @@ gives the reason. The rate is a picker over an ordinary integer key, so a
 figure the list does not offer can still be written by hand and the window
 will show it.
 
+The **Font** and **Bank font** rows are menus of the faces the terminal
+ships. Ticking **Also offer installed system fonts** adds the machine's
+installed faces below a separator. The dashed line at the top of a menu
+tears it off into a window that stays open, so face after face can be tried
+on the running terminal; on macOS, where menus cannot be torn off, the menu
+closes after each pick.
+
 The **Font size** row sits on the Screen tab's Type group, directly under
 Font, as a number typed in pixels. It writes a `[general]` key, so the preset
 dialog leaves it alone. Its readout says what the chosen face draws, `24 px

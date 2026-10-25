@@ -382,26 +382,29 @@ proc ::rcsettings::ui::form::build_row {g r table key kind label arg page} {
                 -onvalue $on -offvalue $off -text "" \
                 -command [list ::rcsettings::ui::form::on_toggle $id]
         }
-        enum - font - choice {
+        enum - choice {
             # `enum` is a key the schema states as an enum, and its names
             # come from the dump's own list. `choice` is a key of ordinary
             # type whose usable values are a convention rather than a
             # schema fact, and the row states them itself: serial's baud is
             # the rates a wire ran at, over an integer the terminal would
             # take any value of.
-            if {$kind eq "font"} {
-                set names [font_keys]
-            } elseif {$kind eq "choice"} {
-                set names $arg
-            } else {
-                set names [::rcsettings::model::enum $key]
-            }
-            set shown [expr {$kind eq "font" ? [font_labels] : $names}]
+            set names [expr {$kind eq "choice" ? $arg
+                : [::rcsettings::model::enum $key]}]
             set w $g.ctl_$key
-            ttk::combobox $w -state readonly -values $shown -exportselection 0
+            ttk::combobox $w -state readonly -values $names -exportselection 0
             bind $w <<ComboboxSelected>> \
                 [list ::rcsettings::ui::form::on_pick $id]
             dict set row names $names
+        }
+        font {
+            # A menu rather than a combobox, so that it tears off: its dashed
+            # line makes it a window of its own that stays open while face
+            # after face is tried on the running terminal. fill_font_menu
+            # puts the faces in once the row is registered.
+            set w $g.ctl_$key
+            ttk::menubutton $w -menu $w.menu
+            menu $w.menu -tearoff 1 -title $label
         }
         color {
             # A swatch is the colour, so it is a canvas filled with it rather
@@ -431,30 +434,67 @@ proc ::rcsettings::ui::form::build_row {g r table key kind label arg page} {
 
     dict set Rows $id $row
     dict lappend Order $page $id
+    if {$kind eq "font"} { fill_font_menu $id }
 }
 
-# The font catalogue, as the dump lists it: the persisted key and the label
-# the terminal shows for it, which are not the same string for the bundled
-# faces (TERMINESS_SCALED prints as "Terminess"). The installed system faces,
-# once fetched and while offered, are appended after the bundled ones, not by
-# name: a system install sharing a bundled face's own name is still a
-# different key, and only position (not the printed words) tells the two
-# apart, the same reasoning on_pick already relies on.
-# Column $i (0 the catalogue key, 1 the display name) of the bundled
-# fonts followed by the system ones, which is the one list font_keys and
-# font_labels each pick a column out of.
-proc ::rcsettings::ui::form::font_column {i} {
+# The font catalogue, as the dump lists it, in the groups a font menu shows:
+# {key label} pairs for the bundled faces, then, once fetched and while the
+# box offering them is ticked, for the installed system faces. The key is
+# what the file persists and the label what the terminal shows for it, which
+# are not the same string for the bundled faces (TERMINESS_SCALED prints as
+# "Terminess").
+proc ::rcsettings::ui::form::font_groups {} {
     variable SystemFonts
-    set out {}
-    foreach f [::rcsettings::model::fonts] {
-        lappend out [lindex $f $i]
+    set groups [list [lmap f [::rcsettings::model::fonts] { lrange $f 0 1 }]]
+    if {[::rcsettings::model::effective screen font_source] eq "system_fonts"
+            && [llength $SystemFonts]} {
+        lappend groups [lmap f $SystemFonts { lrange $f 0 1 }]
     }
-    if {[::rcsettings::model::effective screen font_source] ne "system_fonts"} { return $out }
-    return [concat $out [lmap f $SystemFonts { lindex $f $i }]]
+    return $groups
 }
 
-proc ::rcsettings::ui::form::font_keys {} { return [font_column 0] }
-proc ::rcsettings::ui::form::font_labels {} { return [font_column 1] }
+# Refill $id's menu from the catalogue, a separator between its groups. Each
+# entry is a radiobutton carrying its catalogue key, so the face the file
+# names is the one marked, and the bundled JetBrains Mono and a system
+# install of it, which print the same words, are still two keys. A copy torn
+# off the menu is a clone Tk keeps in step with it.
+proc ::rcsettings::ui::form::fill_font_menu {id} {
+    variable Rows
+    set row [dict get $Rows $id]
+    set m [[dict get $row control] cget -menu]
+    $m delete 0 end
+    set names {}
+    set labels {}
+    foreach group [font_groups] {
+        if {[llength $names]} { $m add separator }
+        foreach pair $group {
+            lassign $pair key label
+            $m add radiobutton -label $label -value $key \
+                -variable ::rcsettings::ui::form::Value($id) \
+                -command [list ::rcsettings::ui::form::on_font $id]
+            lappend names $key
+            lappend labels $label
+        }
+    }
+    fit_menu $m
+    dict set row names $names
+    dict set row labels $labels
+    dict set Rows $id $row
+}
+
+# X11 does not scroll a menu taller than the screen: it is posted at the top
+# edge and the entries past the bottom one cannot be reached. So the menu is
+# broken into columns, a new one starting at the first entry that would sit
+# below the screen.
+proc ::rcsettings::ui::form::fit_menu {m} {
+    set room [expr {[winfo screenheight $m]
+        - 2 * [font metrics TkMenuFont -linespace]}]
+    for {set i 0} {$i <= [$m index end]} {incr i} {
+        if {[$m type $i] eq "radiobutton" && [$m yposition $i] > $room} {
+            $m entryconfigure $i -columnbreak 1
+        }
+    }
+}
 
 # ----------------------------------------------------- system font fetch --
 
@@ -483,24 +523,18 @@ proc ::rcsettings::ui::form::maybe_fetch_system_fonts {table} {
     set SystemFonts $fonts
     set SystemFontsFetched 1
     set SystemFontsFetching 0
-    update_font_combos
+    update_font_menus
 }
 
-# The two pickers whose list is the merged catalogue: screen.font_name and
-# chassis.bank_font_name. Their -values move in place, and each is
-# re-resolved against the wider list, which is how a persisted system face
-# shown as "missing" under the bundled-only list resolves the moment the
-# merge gives it back its name.
-proc ::rcsettings::ui::form::update_font_combos {} {
+# The two pickers whose menu is the catalogue: screen.font_name and
+# chassis.bank_font_name. Each is refilled and re-resolved against what is
+# now offered, which is how a persisted system face, shown by its bare name
+# while the installed faces are not offered, gets its entry back once they are.
+proc ::rcsettings::ui::form::update_font_menus {} {
     variable Rows
-    set names [font_keys]
-    set shown [font_labels]
     foreach id {screen.font_name chassis.bank_font_name} {
         if {![dict exists $Rows $id]} { continue }
-        set row [dict get $Rows $id]
-        dict set row names $names
-        dict set Rows $id $row
-        [dict get $row control] configure -values $shown
+        fill_font_menu $id
         refresh_row $id
     }
 }
@@ -596,7 +630,7 @@ proc ::rcsettings::ui::form::on_toggle {id} {
     # The checkbox only ever sits on the Screen page, so opting in while
     # looking at it is opting in while the tab the fetch is gated on is
     # already the one showing: no need to ask the notebook which tab this is.
-    if {$id eq "screen.font_source"} { maybe_fetch_system_fonts screen; update_font_combos }
+    if {$id eq "screen.font_source"} { maybe_fetch_system_fonts screen; update_font_menus }
 }
 
 proc ::rcsettings::ui::form::on_pick {id} {
@@ -606,10 +640,16 @@ proc ::rcsettings::ui::form::on_pick {id} {
     set row [dict get $Rows $id]
     set i [[dict get $row control] current]
     if {$i < 0} { return }
-    # By index, not by the text shown. The font catalogue holds two entries
-    # that print the same words (the bundled JetBrains Mono and a system
-    # install of it), and only their position tells them apart.
     set_value $id [lindex [dict get $row names] $i]
+}
+
+# A font menu's entry chosen, its radiobutton having put its key in the row's
+# variable already.
+proc ::rcsettings::ui::form::on_font {id} {
+    variable Repainting
+    variable Value
+    if {$Repainting} { return }
+    set_value $id $Value($id)
     if {$id eq "screen.font_name"} { refresh_row general.font_size }
 }
 
@@ -690,15 +730,19 @@ proc ::rcsettings::ui::form::refresh_row {id} {
                 }
                 [dict get $row readout] configure -text ""
             }
-            enum - font - choice {
+            enum - choice - font {
+                # A name the list does not carry is what the file says, and
+                # the terminal falls back to its default face without
+                # rewriting the file. Showing it is more honest than showing
+                # the face that will actually be drawn.
                 set i [lsearch -exact [dict get $row names] $value]
-                if {$i >= 0} {
+                if {[dict get $row kind] eq "font"} {
+                    set Value($id) $value
+                    $w configure -text [expr {$i >= 0
+                        ? [lindex [dict get $row labels] $i] : $value}]
+                } elseif {$i >= 0} {
                     $w current $i
                 } else {
-                    # A name the catalogue does not carry is what the file
-                    # says, and the terminal falls back to its default face
-                    # without rewriting the file. Showing it is more honest
-                    # than showing the face that will actually be drawn.
                     $w set $value
                 }
                 [dict get $row readout] configure -text ""

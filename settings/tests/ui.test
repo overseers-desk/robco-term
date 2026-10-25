@@ -28,6 +28,9 @@ if {[testConstraint tk]} {
     source [file join $::uidir form.tcl]
     source [file join $::uidir ssh_page.tcl]
 }
+# Tk ignores -columnbreak on Aqua, so a long menu there is not broken into
+# columns and the test that it is has nothing to measure.
+testConstraint menuColumns [expr {[testConstraint tk] && [tk windowingsystem] ne "aqua"}]
 
 # The keys the form deliberately does not show, and why. The first four are
 # what docs/config.md marks as read by nothing in this build; `name` is the
@@ -377,7 +380,7 @@ test fontsource-6.4 {toggling back off removes the key, the minimal edit} -const
     set pinned
 } -result 0
 
-# update_font_combos reaches into the Rows the last-built Screen and Chassis
+# update_font_menus reaches into the Rows the last-built Screen and Chassis
 # pages registered, font_name and bank_font_name among them, so a fetch that
 # actually runs needs live pages behind those two rows to write back into.
 proc sf_build_pages {name} {
@@ -458,7 +461,21 @@ test fetch-7.4 {an error surfaces and resets the guard for a later retry} -const
     list $after1 $after2
 } -result {{0 0} {1 {{Stub Stub 32 false}}}}
 
-test fetch-7.5 {a fetch that lands updates both font combos' values} -constraints {
+# A font row's menu, entry by entry: a radiobutton by its label, a separator
+# as `--`, the tear-off line left out.
+proc menu_entries {id} {
+    set m [[dict get $::rcsettings::ui::form::Rows $id control] cget -menu]
+    set out {}
+    for {set i 0} {$i <= [$m index end]} {incr i} {
+        switch -- [$m type $i] {
+            radiobutton { lappend out [$m entrycget $i -label] }
+            separator   { lappend out -- }
+        }
+    }
+    return $out
+}
+
+test fetch-7.5 {a fetch that lands updates both font menus} -constraints {
     tk realBinary
 } -body {
     sf_init "\[screen\]\nfont_source = \"system_fonts\"\n"
@@ -467,18 +484,61 @@ test fetch-7.5 {a fetch that lands updates both font combos' values} -constraint
     with_stub_system_fonts {{SysFace {A System Face} 32 false}} {
         ::rcsettings::ui::form::maybe_fetch_system_fonts screen
     }
-    set screen_values [.t75.page_screen.canvas.body.g3.ctl_font_name cget -values]
-    set chassis_values [.t75.page_chassis.canvas.body.g1.ctl_bank_font_name cget -values]
+    set screen_entries [menu_entries screen.font_name]
+    set chassis_entries [menu_entries chassis.bank_font_name]
     destroy .t75
-    list [expr {"A System Face" in $screen_values}] \
-        [expr {"A System Face" in $chassis_values}]
+    list [expr {"A System Face" in $screen_entries}] \
+        [expr {"A System Face" in $chassis_entries}]
 } -result {1 1}
 
+test fetch-7.6 {unticked, the menu is the bundled faces; ticked, the installed ones follow a separator} -constraints {
+    tk realBinary
+} -body {
+    sf_init "\[screen\]\nfont_source = \"system_fonts\"\n"
+    sf_reset_state
+    sf_build_pages .t76
+    with_stub_system_fonts {{SysFace {A System Face} 32 false}} {
+        ::rcsettings::ui::form::maybe_fetch_system_fonts screen
+    }
+    set bundled [lmap f [::rcsettings::model::fonts] {lindex $f 1}]
+    set ticked [menu_entries screen.font_name]
+    set ::rcsettings::ui::form::Value(screen.font_source) bundled_fonts
+    ::rcsettings::ui::form::on_toggle screen.font_source
+    set unticked [menu_entries screen.font_name]
+    destroy .t76
+    list [expr {$ticked eq [concat $bundled -- {{A System Face}}]}] \
+        [expr {$unticked eq $bundled}]
+} -result {1 1}
+
+test fetch-7.7 {a menu taller than the screen is broken into columns} -constraints {
+    menuColumns realBinary
+} -body {
+    sf_init "\[screen\]\nfont_source = \"system_fonts\"\n"
+    sf_reset_state
+    sf_build_pages .t77
+    set n [expr {[winfo screenheight .] / [font metrics TkMenuFont -linespace] * 2}]
+    set many {}
+    for {set i 0} {$i < $n} {incr i} { lappend many [list Face$i "Face $i" 32 false] }
+    with_stub_system_fonts $many {
+        ::rcsettings::ui::form::maybe_fetch_system_fonts screen
+    }
+    set m [.t77.page_screen.canvas.body.g3.ctl_font_name cget -menu]
+    update idletasks
+    set fits [expr {[winfo reqheight $m] <= [winfo screenheight $m]}]
+    destroy .t77
+    set fits
+} -result 1
+
+# Choose a bundled face the way a click does: invoke its menu entry, which
+# sets the row's variable and runs the entry's command.
 proc pick_face {text} {
-    set row [dict get $::rcsettings::ui::form::Rows screen.font_name]
-    set key [lindex [lsearch -inline -index 1 [::rcsettings::model::fonts] $text] 0]
-    [dict get $row control] current [lsearch -exact [dict get $row names] $key]
-    ::rcsettings::ui::form::on_pick screen.font_name
+    set m [[dict get $::rcsettings::ui::form::Rows screen.font_name control] cget -menu]
+    for {set i 0} {$i <= [$m index end]} {incr i} {
+        if {[$m type $i] eq "radiobutton" && [$m entrycget $i -label] eq $text} {
+            $m invoke $i
+            break
+        }
+    }
     [dict get $::rcsettings::ui::form::Rows general.font_size readout] cget -text
 }
 
