@@ -275,6 +275,16 @@ impl<T: DcsTap> ChannelSession<T> {
             ChannelSession::Ssh(s) => s.leave_control_mode(),
         }
     }
+
+    /// The wire under the slot went while the slot stands: only an SSH
+    /// channel outlives its wire (`SshChannel::lost`); a PTY whose child
+    /// went is over.
+    pub fn lost(&self) -> bool {
+        match self {
+            ChannelSession::Ssh(s) => s.lost(),
+            ChannelSession::Pty(_) | ChannelSession::TmuxPane(_) => false,
+        }
+    }
 }
 
 #[cfg(test)]

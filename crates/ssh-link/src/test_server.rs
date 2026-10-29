@@ -181,6 +181,11 @@ impl server::Handler for Echo {
         session: &mut Session,
     ) -> Result<(), Self::Error> {
         self.seen.lock().unwrap().received.extend_from_slice(data);
+        // Ctrl+\ drops the connection under every channel, closing none:
+        // the shape of a link that died.
+        if data == b"\x1c" {
+            return Err(russh::Error::HUP);
+        }
         if data == b"\x04" {
             session.exit_status_request(channel, 7)?;
             session.eof(channel)?;

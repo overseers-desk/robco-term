@@ -259,12 +259,12 @@ impl TerminalSurface {
             return visible;
         };
         // The peeled envelope body, and whether an `ST` closed it, off the
-        // wire's own tap.
-        let drained = self
-            .wire_mut(bank)
-            .and_then(|wire| wire.tap_mut())
-            .map(|tap| (tap.take_body(), tap.take_ended()));
-        let Some((bytes, ended)) = drained else {
+        // wire's own tap; and whether the wire itself is gone.
+        let drained = self.wire_mut(bank).and_then(|wire| {
+            let lost = wire.lost();
+            wire.tap_mut().map(|tap| (tap.take_body(), tap.take_ended(), lost))
+        });
+        let Some((bytes, ended, lost)) = drained else {
             // No gateway, no wire: the bank collapsed under this client.
             return visible;
         };
@@ -275,6 +275,9 @@ impl TerminalSurface {
         // gateway still attached ends the attachment here.
         if ended && gateway.attached() {
             events.extend(gateway.control_mode_ended());
+        }
+        if lost && gateway.attached() {
+            events.extend(gateway.wire_lost());
         }
         // The pump's own clock: the queued wire goes out, a settled resize
         // with it, and the bootstrap watchdog reads the attachment's pulse --

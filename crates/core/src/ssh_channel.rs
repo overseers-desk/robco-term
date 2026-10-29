@@ -78,7 +78,12 @@ pub struct SshChannel<T: DcsTap> {
     /// A remote byte has arrived: the connection lived. What `Eof` means
     /// depends on it.
     lived: bool,
-    eof: bool,
+    /// The transport spoke after the connection lived: the only word it has
+    /// then is the connection's loss, and it means the `Eof` behind it ends
+    /// the wire and not the row.
+    lost: bool,
+    /// The wire's `Eof` has arrived; nothing more will.
+    ended: bool,
 }
 
 impl<T: DcsTap> SshChannel<T> {
@@ -104,7 +109,8 @@ impl<T: DcsTap> SshChannel<T> {
             wire,
             replies,
             lived: false,
-            eof: false,
+            lost: false,
+            ended: false,
         }
     }
 
@@ -117,17 +123,19 @@ impl<T: DcsTap> SshChannel<T> {
     /// The sync timeout is honoured here for the same reason it is there:
     /// owning the loop means nothing else will.
     ///
-    /// The Eof law: a connection that lived (a remote byte arrived) ends
-    /// its row through `Pumped::eof`, the path a died PTY walks. One that
-    /// never lived does not -- the row stays, wearing the transport's
-    /// refusal. A shell that fails to spawn never takes a slot; a
-    /// connection that fails to establish already has one, and that slot is
-    /// the only place its refusal is readable. Closing it is the user's,
-    /// once they have read why it is dead.
+    /// The Eof law: a channel the far side closed, its shell having exited,
+    /// ends its row through `Pumped::eof`, the path a died PTY walks. One
+    /// whose connection never lived, or went under it, does not: the row
+    /// stays, wearing the transport's refusal or `connection lost`, with
+    /// whatever its screen last held ([`Self::lost`]). A shell that fails
+    /// to spawn never takes a slot; a
+    /// connection that fails or drops already has one, and that slot is the
+    /// only place its end is readable. Closing it is the user's, once they
+    /// have read why it is dead.
     pub fn pump(&mut self) -> Pumped {
         let mut out = Pumped::default();
-        if self.eof {
-            out.eof = true;
+        if self.ended {
+            out.eof = self.lived && !self.lost;
             return out;
         }
         let mut grid = Vec::new();
@@ -142,14 +150,13 @@ impl<T: DcsTap> SshChannel<T> {
                 }
                 SshEvent::Notice(chunk) => {
                     out.bytes += chunk.len();
+                    self.lost |= self.lived;
                     self.processor.advance(&mut self.term, &chunk);
                 }
                 SshEvent::ExitStatus(_) => {}
                 SshEvent::Eof => {
-                    if self.lived {
-                        self.eof = true;
-                        out.eof = true;
-                    }
+                    self.ended = true;
+                    out.eof = self.lived && !self.lost;
                     break;
                 }
             }
@@ -251,6 +258,12 @@ impl<T: DcsTap> SshChannel<T> {
     /// The gateway's write half onto this channel. See [`SshWire::writer`].
     pub fn control_writer(&self) -> Box<dyn std::io::Write + Send> {
         self.wire.writer()
+    }
+
+    /// The connection went under this channel after it lived, and the row
+    /// stands to say so: whatever the channel carried has lost its wire.
+    pub fn lost(&self) -> bool {
+        self.ended && self.lost
     }
 
     /// Force the DCS parser out of an envelope that will never close, the
@@ -420,5 +433,22 @@ mod tests {
         assert_eq!(pumped.bytes, 3);
         assert!(s.pump().eof, "a dead wire reports eof on every pump");
         assert_eq!(s.pump().bytes, 0);
+    }
+
+    #[test]
+    fn a_connection_lost_after_it_lived_keeps_its_row_and_says_so() {
+        let wire = FakeWire::default();
+        {
+            let mut q = wire.events.lock().unwrap();
+            q.push_back(SshEvent::Data(b"$ ".to_vec()));
+            q.push_back(SshEvent::Notice(b"[ssh: connection lost]".to_vec()));
+            q.push_back(SshEvent::Eof);
+        }
+        let mut s = SshChannel::new(size(), 100, false, NoopTap::default(), Box::new(wire.clone()));
+        assert!(!s.lost(), "nothing pumped yet");
+        assert!(!s.pump().eof, "the row stays");
+        assert!(s.lost());
+        assert!(viewport_text(s.term()).concat().contains("connection lost"), "on a 20-column grid");
+        assert!(!s.pump().eof && s.lost(), "and stays, and stays lost");
     }
 }

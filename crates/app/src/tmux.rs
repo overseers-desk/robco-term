@@ -592,6 +592,14 @@ impl<W: Write> Gateway<W> {
         out
     }
 
+    /// The wire under the carrier went: no `%exit` and no `ST` will come down
+    /// it, and the envelope is left open.
+    pub fn wire_lost(&mut self) -> Vec<GatewayEvent> {
+        let mut out = Vec::new();
+        self.teardown(true, Some("connection lost".into()), &mut out);
+        out
+    }
+
     /// Feed peeled DCS body bytes; act on what they complete; answer what the
     /// surface must do.
     pub fn advance(&mut self, bytes: &[u8]) -> Vec<GatewayEvent> {

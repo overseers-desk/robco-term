@@ -9,7 +9,7 @@
 //! connection does, whichever side ended it; every channel hears `Eof`
 //! first, so no row outlives its wire silently.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -240,10 +240,12 @@ async fn run(
     // own -- this runtime is one thread, so a task is concurrency, not
     // parallelism. The supervisor ends when the loop side drops the Link,
     // and the disconnect then ends every channel task through its Eof.
-    raise(&handle, &target.term, target.size, wire).await;
+    let hanging_up = Arc::new(AtomicBool::new(false));
+    raise(&handle, &target.term, target.size, wire, &hanging_up).await;
     while let Some(LinkCmd::Open { wire, size }) = link_cmd.recv().await {
-        raise(&handle, &target.term, size, wire).await;
+        raise(&handle, &target.term, size, wire, &hanging_up).await;
     }
+    hanging_up.store(true, Ordering::Relaxed);
     let _ = handle
         .disconnect(russh::Disconnect::ByApplication, "", "en")
         .await;
@@ -257,6 +259,7 @@ async fn raise(
     term: &str,
     size: (u16, u16, u16, u16),
     wire: ChannelWire,
+    hanging_up: &Arc<AtomicBool>,
 ) {
     let channel = match handle.channel_open_session().await {
         Ok(c) => c,
@@ -287,12 +290,16 @@ async fn raise(
         let _ = wire.events.send(WireEvent::Eof).await;
         return;
     }
-    tokio::spawn(drive(channel, wire));
+    tokio::spawn(drive(channel, wire, hanging_up.clone()));
 }
 
-/// Pump one raised channel against its wire until either side ends it.
-async fn drive(channel: russh::Channel<client::Msg>, mut wire: ChannelWire) {
+/// Pump one raised channel against its wire until either side ends it, or
+/// the connection under it goes. That last end is the only one nobody chose,
+/// so it is the one said on the wire before the `Eof`, unless `hanging_up`
+/// shows it was the loop side's own disconnect.
+async fn drive(channel: russh::Channel<client::Msg>, mut wire: ChannelWire, hanging_up: Arc<AtomicBool>) {
     let mut channel = channel;
+    let mut lost = false;
     loop {
         tokio::select! {
             cmd = wire.cmd.recv() => match cmd {
@@ -301,6 +308,7 @@ async fn drive(channel: russh::Channel<client::Msg>, mut wire: ChannelWire) {
                     let sent = channel.data(&bytes[..]).await;
                     wire.queued.fetch_sub(len, Ordering::Relaxed);
                     if sent.is_err() {
+                        lost = true;
                         break;
                     }
                 }
@@ -335,12 +343,19 @@ async fn drive(channel: russh::Channel<client::Msg>, mut wire: ChannelWire) {
                 Some(ChannelMsg::ExitStatus { exit_status }) => {
                     let _ = wire.events.send(WireEvent::ExitStatus(exit_status)).await;
                 }
-                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) | None => break,
+                Some(ChannelMsg::Eof) | Some(ChannelMsg::Close) => break,
+                None => {
+                    lost = true;
+                    break;
+                }
                 Some(_) => {}
             },
         }
     }
 
+    if lost && !hanging_up.load(Ordering::Relaxed) {
+        notice(&wire, "connection lost").await;
+    }
     let _ = channel.eof().await;
     let _ = wire.events.send(WireEvent::Eof).await;
 }

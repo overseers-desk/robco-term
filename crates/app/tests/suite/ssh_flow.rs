@@ -253,6 +253,99 @@ fn a_tmux_opener_echoed_over_ssh_raises_a_bank_the_channel_carries() {
 }
 
 #[test]
+fn a_link_lost_under_a_carrier_ends_its_attachment_and_the_carrier_says_so() {
+    let far = far_side();
+    let mut s = surface();
+    // Paging wants a bank drawn.
+    s.set_cabinet(chassis::Cabinet::from_config(&config::Config::default(), 720.0, 490.0));
+    s.connect_ssh_with(
+        &request(far.port),
+        Box::new(KnownHosts::over(vec![known_hosts(&[&far.host_key_line])])),
+    );
+    let ssh_bank = s.channels().current_bank();
+    pump_until(&mut s, "the remote shell's greeting", |s| glass_contains(s, "ready"));
+
+    // tmux's opener alone: the bank rises, and its gateway holds the
+    // bootstrap until a `%session-changed`, so the echo has nothing of the
+    // gateway's to send back as a protocol of its own.
+    s.write(b"\x1bP1000p");
+    pump_until(&mut s, "a tmux bank to take the air", |s| {
+        s.channels().manager_of(s.channels().current_bank()).is_some_and(|m| m.is_tmux())
+    });
+
+    // The link drops under it, cut from a second channel of the same
+    // connection since the carrier takes no key.
+    assert!(s.step_bank(-1));
+    assert_eq!(s.channels().on_air(), (ssh_bank, 1), "the carrier, on the air");
+    s.new_channel();
+    assert_eq!(s.channels().on_air(), (ssh_bank, 2));
+    pump_until(&mut s, "the second channel's greeting", |s| glass_contains(s, "ready"));
+    s.write(b"\x1c");
+    pump_until(&mut s, "the tmux bank to go with the link", |s| {
+        s.channels().banks().iter().all(|b| !b.manager.is_tmux())
+    });
+    assert_eq!(
+        s.channels().slot_title(ssh_bank, 1).as_deref(),
+        Some("tmux -CC ended: connection lost")
+    );
+    assert_eq!(
+        s.channels().rows().iter().filter(|r| r.bank == ssh_bank).count(),
+        2,
+        "both channels stand"
+    );
+}
+
+#[test]
+fn a_disconnect_asked_for_takes_the_rows_with_it() {
+    let far = far_side();
+    let mut s = surface();
+    s.connect_ssh_with(
+        &request(far.port),
+        Box::new(KnownHosts::over(vec![known_hosts(&[&far.host_key_line])])),
+    );
+    pump_until(&mut s, "the remote shell's greeting", |s| glass_contains(s, "ready"));
+    assert!(s.detach_bank());
+    pump_until(&mut s, "the bank to be swept", |s| {
+        s.channels().rows().iter().all(|r| r.bank == 0)
+    });
+    assert_eq!(s.channels().banks().len(), 1);
+}
+
+#[test]
+fn a_dropped_link_leaves_its_rows_saying_so_until_each_is_closed() {
+    let far = far_side();
+    let mut s = surface();
+    s.connect_ssh_with(
+        &request(far.port),
+        Box::new(KnownHosts::over(vec![known_hosts(&[&far.host_key_line])])),
+    );
+    let bank = s.channels().current_bank();
+    pump_until(&mut s, "the remote shell's greeting", |s| glass_contains(s, "ready"));
+    s.new_channel();
+    pump_until(&mut s, "the second channel's greeting", |s| glass_contains(s, "ready"));
+    s.write(b"lastword");
+    pump_until(&mut s, "the echo", |s| glass_contains(s, "lastword"));
+
+    // The far side drops the connection with no channel closed, as a dead
+    // network does once the keepalive gives up.
+    s.write(b"\x1c");
+    pump_until(&mut s, "the loss on the glass", |s| {
+        glass_unwrapped(s).contains("connection lost")
+    });
+    for _ in 0..20 {
+        s.pump();
+    }
+    assert!(glass_contains(&s, "lastword"), "the screen as the link left it");
+    let rows = |s: &TerminalSurface| s.channels().rows().iter().filter(|r| r.bank == bank).count();
+    assert_eq!(rows(&s), 2, "both channels stand");
+
+    s.close_channel();
+    assert_eq!(rows(&s), 1, "closing one is the user's");
+    assert_eq!(s.channels().on_air(), (bank, 1));
+    assert!(glass_unwrapped(&s).contains("connection lost"));
+}
+
+#[test]
 fn a_refused_host_key_is_readable_until_the_user_closes_it() {
     let far = far_side();
     let mut s = surface();

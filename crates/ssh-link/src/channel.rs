@@ -65,7 +65,8 @@ pub struct ChannelHandle {
 impl ChannelHandle {
     /// The next event, if one is waiting. Called from the surface's pump.
     /// A sender that vanished without its `Eof` (a task cancelled by the
-    /// runtime going down) reads as `Eof`, so no row outlives its wire.
+    /// runtime going down) reads as `Eof`, so no row waits on a wire that is
+    /// gone.
     pub fn try_event(&mut self) -> Option<WireEvent> {
         match self.events.try_recv() {
             Ok(event) => Some(event),
@@ -83,8 +84,8 @@ impl ChannelHandle {
         }
         self.queued.fetch_add(bytes.len(), Ordering::Relaxed);
         // A closed peer means the connection died; the death reaches the
-        // grid as this channel's Eof, so a refused send needs no second
-        // report here.
+        // grid as this channel's `connection lost` and Eof, so a refused send
+        // needs no second report here.
         let _ = self.cmd.send(ChannelCmd::Data(bytes.to_vec()));
     }
 
