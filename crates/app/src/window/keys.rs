@@ -118,10 +118,14 @@ impl TerminalSurface {
     /// step rather than a glide: what was typed lands at the bottom, and
     /// the user has to see it land. A modifier alone and a shortcut the
     /// window keeps never reach here, so they move nothing.
+    ///
+    /// Typing at a row is also the user having read why its attachment
+    /// ended: the record goes, and the session's own title comes back.
     pub(super) fn type_bytes(&mut self, bytes: &[u8]) {
         self.wheel_pixels = 0.0;
-        if let Some(session) = self.channels.session_mut() {
-            self.scroll.to_bottom(session.term_mut());
+        if let Some(row) = self.channels.current_mut() {
+            row.attachment_ended = None;
+            self.scroll.to_bottom(row.session.term_mut());
         }
         self.write(bytes);
     }

@@ -108,10 +108,17 @@ impl TerminalSurface {
 
     /// `Alt+Shift+D`: the bank on view lets go of what it runs on. A tmux
     /// attachment detaches, tmux keeping the session; an SSH bank's record
-    /// goes, and the dropped link is the disconnect. Declines on the home
-    /// bank, so the key reaches the program there.
+    /// goes, and the dropped link is the disconnect. On a carrier's own
+    /// page the attachment it carries is the bank meant, not the bank it
+    /// stands on, so the key on a carrier over SSH detaches tmux and leaves
+    /// the link up. Declines on the home bank, so the key reaches the
+    /// program there.
     pub fn detach_bank(&mut self) -> bool {
-        let view = self.pager.view(&self.channels).bank;
+        let (air, channel) = self.channels.on_air();
+        let view = match self.pager.view(&self.channels).bank {
+            view if view == air => self.channels.carried_bank(air, channel).unwrap_or(view),
+            view => view,
+        };
         match self.channels.manager_of(view) {
             Some(Manager::Tmux { .. }) => {
                 if let Some(gateway) = self.gateway_mut(view) {
@@ -381,9 +388,9 @@ impl TerminalSurface {
                 _ => continue,
             };
             let title = self.channels.slot_title(bank, from);
-            row.title = title.unwrap_or_default().to_string();
             row.open = title.is_some();
             row.ghost = title.is_some();
+            row.title = title.map(String::from).unwrap_or_default();
             row.bright = false;
         }
     }

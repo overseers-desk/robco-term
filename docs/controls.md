@@ -223,14 +223,22 @@ history behind it, so there the same keys are the program's own.
 
 The channel you type `tmux -CC` in stays on its own bank as the
 attachment's carrier. Its pty carries the control-mode protocol itself, so
-while the attachment lasts its strip stays dark and it takes no key. The
-session's windows fill a bank of their own from slot 01, under the title
-row. Each window keeps the slot it was left on: the slot is recorded on the
+while the attachment lasts it takes no key, but it takes the air like any
+channel: its strip reads the attachment, `tmux -CC # @host`, and its screen
+shows where the attach was typed, with a plate over it naming the key that
+detaches. The session's windows fill a bank of their own from slot 01,
+under the title row. Each window keeps the slot it was left on: the slot is recorded on the
 tmux server as the window's `@robco-term-channel` option, so a later attach,
 from this machine or another, finds the bank as it was arranged, empty slots
 included. A window with no slot recorded, or whose slot another window
-holds, takes the lowest empty one. `Alt`+`Shift`+`D` with that bank in view detaches the client, and the
-carrier comes back live. A client the terminal starts itself, for another
+holds, takes the lowest empty one. `Alt`+`Shift`+`D` with that bank in
+view, or with the carrier on the air, detaches the client, and the carrier
+comes back live. An attachment that ends any other way leaves its reason on
+the carrier: the strip reads `tmux -CC ended:` and tmux's own words, such
+as `no sessions` from an attach with no server, or the line that broke the
+protocol, or `no reason given` where tmux said nothing, as it does when its
+server is killed. The plate repeats it over the carrier's screen, and both
+go once you type there. A client the terminal starts itself, for another
 session it finds on a local server, has no channel: its bank stands on the
 wire alone and goes when the client does. Typing `tmux -CC` at a session
 that already has a bank opens a second one; tmux allows a second client and

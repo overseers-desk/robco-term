@@ -183,8 +183,12 @@ pub enum GatewayEvent {
     /// The attachment is over: `channels::Channels::collapse_bank`. With
     /// `lost_protocol` the envelope never closed and no `ST` is coming, so
     /// the surface must also force the gateway's parsers out of it
-    /// (`term::Session::leave_control_mode`).
-    Detached { lost_protocol: bool },
+    /// (`term::Session::leave_control_mode`). `reason` is what tmux or the
+    /// wire said of the end, `None` for a detach, which says nothing.
+    Detached {
+        lost_protocol: bool,
+        reason: Option<String>,
+    },
 }
 
 /// Ours and local: `/proc/<pid>` is a process of our uid and the socket path
@@ -238,6 +242,13 @@ pub struct Gateway<W: Write> {
     panes: HashMap<PaneId, PaneGate>,
 
     host: String,
+    /// What an error block of tmux's own said, such as `no sessions` from an
+    /// attach with no server: the reason the bare `%exit` after it lacks.
+    refused: Option<String>,
+    /// This client asked to go ([`Gateway::detach`]). tmux's `%exit` is as
+    /// bare for a killed server as for a detach, so this is what tells the
+    /// user's own leaving from an end that needs saying.
+    detaching: bool,
     /// The server and the attached session, off the `Server` reply.
     socket: String,
     server_pid: u32,
@@ -282,6 +293,8 @@ impl<W: Write> Gateway<W> {
             channels: HashMap::new(),
             panes: HashMap::new(),
             host: String::new(),
+            refused: None,
+            detaching: false,
             socket: String::new(),
             server_pid: 0,
             session: None,
@@ -414,6 +427,7 @@ impl<W: Write> Gateway<W> {
 
     /// Ask tmux to let this client go; teardown follows on `%exit`.
     pub fn detach(&mut self) {
+        self.detaching = true;
         self.command(&Command::DetachClient, Intent::Ignore);
     }
 
@@ -482,7 +496,7 @@ impl<W: Write> Gateway<W> {
             // is not left holding a client nothing is driving. It goes out
             // ahead of the teardown because a detached gateway sends nothing.
             self.command(&Command::DetachClient, Intent::Ignore);
-            self.teardown(true, &mut out);
+            self.teardown(true, Some("tmux never answered".into()), &mut out);
         }
         out
     }
@@ -574,7 +588,7 @@ impl<W: Write> Gateway<W> {
     /// simply over.
     pub fn control_mode_ended(&mut self) -> Vec<GatewayEvent> {
         let mut out = Vec::new();
-        self.teardown(false, &mut out);
+        self.teardown(false, Some("tmux closed control mode without %exit".into()), &mut out);
         out
     }
 
@@ -608,7 +622,9 @@ impl<W: Write> Gateway<W> {
                     // An error block of tmux's own, such as an attach with no
                     // server: its text is the only word of why.
                     if block.error {
-                        log::warn!("tmux: {}", block.text().join(" "));
+                        let said = block.text().join(" ");
+                        log::warn!("tmux: {said}");
+                        self.refused = Some(said);
                     }
                     log::debug!(
                         "tmux: unsolicited block {:?} of {} line(s)",
@@ -625,11 +641,13 @@ impl<W: Write> Gateway<W> {
                     // Anything else is not tmux: the client process was
                     // killed without closing its device string, and the
                     // shell behind it is talking to us (cpp:319-328).
-                    log::warn!(
-                        "tmux: protocol lost, foreign line: {:?}",
-                        String::from_utf8_lossy(&line)
-                    );
-                    self.teardown(true, &mut out);
+                    let said = String::from_utf8_lossy(&line);
+                    log::warn!("tmux: protocol lost, foreign line: {said:?}");
+                    // Often the reason itself, such as ssh's `Connection to
+                    // host closed.`; a prompt at worst. Control bytes kept
+                    // out, the line being bound for a strip and a badge.
+                    let said: String = said.chars().filter(|c| !c.is_control()).collect();
+                    self.teardown(true, Some(said.trim().to_string()), &mut out);
                 }
             }
         }
@@ -974,12 +992,19 @@ impl<W: Write> Gateway<W> {
                 "tmux: malformed {name}: {:?}",
                 String::from_utf8_lossy(&rest)
             ),
-            // No reason on a detach or an orderly shutdown; one on a crash.
+            // No reason on a detach or an orderly shutdown, a killed server
+            // included; one on a crash.
             Notification::Exit { reason } => {
-                if let Some(reason) = reason {
+                if let Some(reason) = &reason {
                     log::warn!("tmux: %exit {reason}");
                 }
-                self.teardown(false, out);
+                // A run that never attached, such as `tmux -CC ls`, ends
+                // as bare as a killed server's and is no news.
+                let unasked = self.opened.is_some() && !self.detaching;
+                let reason = reason
+                    .or_else(|| self.refused.take())
+                    .or_else(|| unasked.then(|| "no reason given".to_string()));
+                self.teardown(false, reason, out);
             }
             // The first `%session-changed` ends the attach burst: tmux attached
             // rather than ran one command and left, so the wire opens and the
@@ -1044,7 +1069,7 @@ impl<W: Write> Gateway<W> {
     /// Give up the session. `lost_protocol` marks that the peer died without
     /// closing its device string, and the surface must tell the gateway
     /// channel's parsers no `ST` is coming.
-    fn teardown(&mut self, lost_protocol: bool, out: &mut Vec<GatewayEvent>) {
+    fn teardown(&mut self, lost_protocol: bool, reason: Option<String>, out: &mut Vec<GatewayEvent>) {
         if !self.attached {
             return;
         }
@@ -1061,7 +1086,10 @@ impl<W: Write> Gateway<W> {
         self.names.clear();
         self.panes.clear();
         self.resize_due = None;
-        out.push(GatewayEvent::Detached { lost_protocol });
+        out.push(GatewayEvent::Detached {
+            lost_protocol,
+            reason,
+        });
     }
 }
 
@@ -1225,15 +1253,24 @@ mod tests {
     }
 
     /// The same burst's error block answers nothing this client sent, and
-    /// its text is the only account of why the attach failed.
+    /// its text is the only account of why the attach failed: logged, and
+    /// the reason the bare `%exit` after it ends the attachment with.
     #[test]
-    fn an_attach_that_fails_logs_what_tmux_said() {
+    fn an_attach_that_fails_logs_what_tmux_said_and_ends_with_it() {
         init_logger();
         let from = messages().lock().unwrap().len();
         let mut gateway = Gateway::new(Wire::default());
-        gateway.advance(b"%begin 1 274 0\r\nno sessions\r\n%error 1 274 0\r\n%exit\r\n");
+        let events =
+            gateway.advance(b"%begin 1 274 0\r\nno sessions\r\n%error 1 274 0\r\n%exit\r\n");
         let said = messages().lock().unwrap()[from..].join("\n");
         assert!(said.contains("tmux: no sessions"), "it said: {said:?}");
+        assert_eq!(
+            events,
+            vec![GatewayEvent::Detached {
+                lost_protocol: false,
+                reason: Some("no sessions".into()),
+            }]
+        );
     }
 
     /// The listing the surface banks from: every session the server holds,
@@ -1505,33 +1542,66 @@ mod tests {
     fn exit_detaches_and_a_foreign_line_is_the_protocol_lost() {
         let (mut first, _wire) = gateway();
         attach(&mut first);
+        first.detach();
         let events = first.advance(b"%exit\r\n");
         assert_eq!(
             events,
             vec![GatewayEvent::Detached {
                 lost_protocol: false,
-            }]
+                reason: None,
+            }],
+            "a detach this client asked for says nothing"
         );
         assert!(!first.attached());
+
+        // tmux 3.5a sends the same bare line to a client whose server was
+        // killed, and that end is the user's to hear of; and to a one-shot
+        // `tmux -CC ls`, which never attached, and that end is not.
+        let mut listed = Gateway::new(Wire::default());
+        assert_eq!(
+            listed.advance(b"%begin 1 2 0\r\none: 1 windows\r\n%end 1 2 0\r\n%exit\r\n"),
+            vec![GatewayEvent::Detached {
+                lost_protocol: false,
+                reason: None,
+            }]
+        );
+        let (mut killed, _wire) = gateway();
+        attach(&mut killed);
+        assert_eq!(
+            killed.advance(b"%exit\r\n"),
+            vec![GatewayEvent::Detached {
+                lost_protocol: false,
+                reason: Some("no reason given".into()),
+            }]
+        );
 
         init_logger();
         let from = messages().lock().unwrap().len();
         let (mut ended, _wire) = gateway();
-        ended.advance(b"%exit server exited unexpectedly\r\n");
+        let events = ended.advance(b"%exit server exited unexpectedly\r\n");
         let said = messages().lock().unwrap()[from..].join("\n");
         assert!(
             said.contains("tmux: %exit server exited unexpectedly"),
             "it said: {said:?}"
         );
         assert!(!ended.attached());
+        assert_eq!(
+            events,
+            vec![GatewayEvent::Detached {
+                lost_protocol: false,
+                reason: Some("server exited unexpectedly".into()),
+            }]
+        );
 
+        // The line is the reason, its control bytes kept off the strip.
         let (mut second, _wire) = gateway();
         attach(&mut second);
-        let events = second.advance(b"bash-5.2$ \r\n");
+        let events = second.advance(b"Connection to far closed.\x07\r\n");
         assert_eq!(
             events,
             vec![GatewayEvent::Detached {
                 lost_protocol: true,
+                reason: Some("Connection to far closed.".into()),
             }]
         );
     }
@@ -1916,7 +1986,8 @@ mod tests {
         assert_eq!(
             events,
             vec![GatewayEvent::Detached {
-                lost_protocol: true
+                lost_protocol: true,
+                reason: Some("tmux never answered".into()),
             }]
         );
         assert!(!gateway.attached());

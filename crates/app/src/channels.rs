@@ -6,7 +6,9 @@
 //! `tmux -CC` attachment, or by one SSH connection this program owns, whose
 //! channels multiplex over the one wire. An attachment's wire is the pty of
 //! the channel `tmux -CC` was typed in, its carrier, which stays on its own
-//! bank and takes neither the air nor a key while attached; the windows fill
+//! bank and takes the air like any row, though not a key, while attached;
+//! its strip reads the attachment it carries, and once that ends, why,
+//! until the user types there (`Row::attachment_ended`); the windows fill
 //! the attachment's bank from slot 1, each on the slot tmux holds for it
 //! where that is free (`tmux_cc::command::CHANNEL_OPTION`). Each tmux session gets a bank of its
 //! own, and so does each SSH connection. Within a bank a slot whose session has exited goes dark and stays dark: no
@@ -40,6 +42,7 @@
 //! rule remembered at every call site that touches the state, and walking the
 //! small, bounded row set removes the rule instead of keeping it.
 
+use std::borrow::Cow;
 use std::mem;
 
 use tmux_cc::{PaneId, WindowId};
@@ -124,6 +127,10 @@ pub struct Row<S> {
     pub title: String,
     /// Where tmux draws this row: the window and the pane showing in it.
     pub tmux: Option<(WindowId, PaneId)>,
+    /// Why the tmux attachment this row carried ended, in tmux's or the
+    /// link's own words, kept until the user types here: the strip and the
+    /// glass say it (`Channels::slot_title`), the session's screen does not.
+    pub attachment_ended: Option<String>,
     /// What the slot holds. `app` puts a `term::Session` here; a test puts
     /// whatever it can assert on.
     pub session: S,
@@ -298,19 +305,25 @@ impl<S> Channels<S> {
     }
 
     /// The title standing at a slot, or `None` for a dark one. Computed
-    /// rather than cached (see the module doc).
-    pub fn slot_title(&self, bank: BankId, channel: u32) -> Option<&str> {
-        self.row_of(bank, channel)
-            .map(|i| self.rows[i].title.as_str())
+    /// rather than cached (see the module doc). A carrier reads the bank it
+    /// carries, and a row whose attachment ended reads why, both over the
+    /// session's own title, which comes back once the user types there.
+    pub fn slot_title(&self, bank: BankId, channel: u32) -> Option<Cow<'_, str>> {
+        let row = &self.rows[self.row_of(bank, channel)?];
+        if let Some(carried) = self.carried_bank(bank, channel) {
+            return self.bank_identity(carried).map(Cow::Owned);
+        }
+        Some(match &row.attachment_ended {
+            Some(reason) => Cow::Owned(ended_title(reason)),
+            None => Cow::Borrowed(row.title.as_str()),
+        })
     }
 
     /// What the window title reads. `None` is where the caller falls back to
     /// the application's own name, which is the surface's string to supply.
-    pub fn current_title(&self) -> Option<&str> {
-        match self.slot_title(self.current_bank, self.current_channel()) {
-            Some(t) if !t.is_empty() => Some(t),
-            _ => None,
-        }
+    pub fn current_title(&self) -> Option<Cow<'_, str>> {
+        self.slot_title(self.current_bank, self.current_channel())
+            .filter(|t| !t.is_empty())
     }
 
     pub fn current(&self) -> Option<&Row<S>> {
@@ -449,26 +462,23 @@ impl<S> Channels<S> {
     }
 
     /// The air lands on the channel the bank was left showing, or on its
-    /// first open row when that slot has gone dark since; never on a
-    /// carrier. False only for a bank this set does not hold: one with no
-    /// open row takes the air too, on the slot it remembers or, where a
-    /// carrier stands there, its first free one, the strip the user paged to
-    /// and the glass having to agree (`window::TerminalSurface::no_signal`
-    /// draws the rest).
+    /// first open row when that slot has gone dark since. False only for a
+    /// bank this set does not hold: one with no open row takes the air too,
+    /// on the slot it remembers, the strip the user paged to and the glass
+    /// having to agree (`window::TerminalSurface::no_signal` draws the
+    /// rest).
     pub fn select_bank(&mut self, bank: BankId) -> bool {
         let Some(i) = self.bank_of(bank) else {
             return false;
         };
         let remembered = self.banks[i].channel;
-        let open = |c: u32| self.row_of(bank, c).is_some() && !self.is_carrier(bank, c);
-        let channel = if open(remembered) {
+        let channel = if self.row_of(bank, remembered).is_some() {
             remembered
         } else {
-            match self.rows.iter().find(|r| r.bank == bank && open(r.channel)) {
-                Some(row) => row.channel,
-                None if self.is_carrier(bank, remembered) => self.first_free(bank),
-                None => remembered,
-            }
+            self.rows
+                .iter()
+                .find(|r| r.bank == bank)
+                .map_or(remembered, |row| row.channel)
         };
         self.set_current(bank, channel);
         true
@@ -502,6 +512,7 @@ impl<S> Channels<S> {
             channel,
             title: String::new(),
             tmux: None,
+            attachment_ended: None,
             session,
         });
         self.set_current(0, channel);
@@ -604,6 +615,7 @@ impl<S> Channels<S> {
             channel,
             title: normalize_title(name),
             tmux: Some((window.clone(), pane.clone())),
+            attachment_ended: None,
             session,
         });
         if asked.is_some() {
@@ -671,7 +683,7 @@ impl<S> Channels<S> {
     /// takes the attachment it carried down first.
     pub fn session_died(&mut self, bank: BankId, channel: u32) -> Close {
         if let Some(carried) = self.carried_bank(bank, channel) {
-            self.collapse_bank(carried);
+            self.collapse_bank(carried, None);
         }
         if self.row_of(bank, channel).is_none() {
             return Close::Nothing;
@@ -717,23 +729,18 @@ impl<S> Channels<S> {
 
     /// The row nearest the hole a removed row left, its own bank's rows
     /// first: the one that slid into its place, else the nearest one before
-    /// it, else whatever another bank still holds. Never a carrier.
+    /// it, else whatever another bank still holds.
     fn nearest_row(&self, index: usize, bank: BankId) -> Option<usize> {
         let at = index.min(self.rows.len());
-        let order = || {
-            (at..self.rows.len())
-                .chain((0..at).rev())
-                .filter(|i| !self.is_carrier(self.rows[*i].bank, self.rows[*i].channel))
-        };
+        let order = || (at..self.rows.len()).chain((0..at).rev());
         order().find(|i| self.rows[*i].bank == bank).or_else(|| order().next())
     }
 
     // ---- selecting and storing ---------------------------------------
 
-    /// A dark slot is not selectable, and neither is a carrier, whose pty is
-    /// an attachment's wire.
+    /// A dark slot is not selectable.
     pub fn select_channel(&mut self, bank: BankId, channel: u32) -> bool {
-        if self.row_of(bank, channel).is_none() || self.is_carrier(bank, channel) {
+        if self.row_of(bank, channel).is_none() {
             return false;
         }
         self.set_current(bank, channel);
@@ -801,7 +808,7 @@ impl<S> Channels<S> {
         let slots: Vec<u32> = self
             .rows
             .iter()
-            .filter(|r| r.bank == self.current_bank && !self.is_carrier(r.bank, r.channel))
+            .filter(|r| r.bank == self.current_bank)
             .map(|r| r.channel)
             .collect();
         let current = self.current_channel();
@@ -883,6 +890,7 @@ impl<S> Channels<S> {
             channel: 1,
             title: ssh_title(user, host),
             tmux: None,
+            attachment_ended: None,
             session,
         });
         self.set_current(id, 1);
@@ -914,6 +922,7 @@ impl<S> Channels<S> {
             channel,
             title,
             tmux: None,
+            attachment_ended: None,
             session,
         });
         self.set_current(bank, channel);
@@ -936,17 +945,21 @@ impl<S> Channels<S> {
         id
     }
 
-    /// Detach or a dead wire: the bank goes with its window rows. A user
-    /// standing on it lands on the carrier where one stands, else on the
-    /// nearest surviving row; anywhere else the air stays put. Answers the
-    /// carrier's pair.
-    pub fn collapse_bank(&mut self, bank: BankId) -> Option<(BankId, u32)> {
+    /// Detach or a dead wire: the bank goes with its window rows, and the
+    /// carrier keeps `reason`, or loses an older one where a detach gave
+    /// none. A user standing on the bank lands on the carrier where one
+    /// stands, else on the nearest surviving row; anywhere else the air stays
+    /// put. Answers the carrier's pair.
+    pub fn collapse_bank(&mut self, bank: BankId, reason: Option<&str>) -> Option<(BankId, u32)> {
         let i = self.bank_of(bank)?;
         let carrier = self.banks[i].manager.carrier();
         let at = self.rows.iter().position(|r| r.bank == bank).unwrap_or(0);
         let was_here = self.current_bank == bank;
         self.rows.retain(|r| r.bank != bank);
         self.banks.remove(i);
+        if let Some(row) = carrier.and_then(|(b, c)| self.row_of(b, c)) {
+            self.rows[row].attachment_ended = reason.map(str::to_string);
+        }
         if was_here {
             let landing = carrier
                 .filter(|(b, c)| self.row_of(*b, *c).is_some())
@@ -990,6 +1003,11 @@ fn normalize_title(raw: &str) -> String {
 /// What a tmux bank is called.
 fn gateway_title(host: &str) -> String {
     format!("tmux -CC # @{host}")
+}
+
+/// What a row reads once the attachment it carried has ended.
+fn ended_title(reason: &str) -> String {
+    format!("tmux -CC ended: {reason}")
 }
 
 /// What an SSH bank and its channels are called.
@@ -1185,7 +1203,7 @@ mod tests {
         let mut set = channels();
         assert_eq!(set.current_title(), None);
         set.set_title(0, 1, "  ~/src  ");
-        assert_eq!(set.current_title(), Some("~/src"));
+        assert_eq!(set.current_title().as_deref(), Some("~/src"));
         set.set_title(0, 1, "   ");
         assert_eq!(set.current_title(), None, "an empty title is the fallback");
     }
@@ -1246,13 +1264,13 @@ mod tests {
         assert_eq!(set.current().unwrap().session, 1, "the first window is on the air");
         // The ones tmux volunteers after it line up without taking the air.
         assert!(window(&mut set, bank, 2, "logs", 2));
-        assert_eq!(set.slot_title(bank, 2), Some("logs"));
+        assert_eq!(set.slot_title(bank, 2).as_deref(), Some("logs"));
         assert_eq!(set.current_channel(), 1);
         // A volunteered window landing on a freed slot 1 does not either.
         set.select_channel(bank, 2);
         set.window_closed(bank, &WindowId::parse("@1").unwrap());
         assert!(window(&mut set, bank, 4, "volunteered", 4));
-        assert_eq!(set.slot_title(bank, 1), Some("volunteered"));
+        assert_eq!(set.slot_title(bank, 1).as_deref(), Some("volunteered"));
         assert_eq!(set.current_channel(), 2);
         // ...but one this set asked for takes it outright.
         assert_eq!(set.new_tmux_window(), Some(bank));
@@ -1262,7 +1280,7 @@ mod tests {
         assert!(set.ask_for_window(bank, 7));
         assert!(window(&mut set, bank, 5, "pressed", 5));
         assert_eq!(set.on_air(), (bank, 7));
-        assert_eq!(set.slot_title(bank, 7), Some("pressed"));
+        assert_eq!(set.slot_title(bank, 7).as_deref(), Some("pressed"));
     }
 
     /// The slots tmux holds for an attachment's windows come back as they
@@ -1359,14 +1377,32 @@ mod tests {
     /// The first-run path: the only channel there was carries the wire, so
     /// home takes the air on no row at all.
     #[test]
-    fn a_bank_whose_only_row_is_a_carrier_takes_the_air_on_no_row() {
+    fn a_bank_whose_only_row_is_a_carrier_puts_the_carrier_on_the_air() {
         let mut set = channels();
         set.attach(0, 1, "prime").unwrap();
         assert!(set.select_bank(0));
-        assert_eq!(set.on_air(), (0, 2));
-        assert!(set.current().is_none(), "and nothing to put on the glass");
-        assert!(set.open_first_free(|| Some(77)));
-        assert_eq!(set.on_air(), (0, 2));
+        assert_eq!(set.on_air(), (0, 1));
+        assert_eq!(set.current().unwrap().session, 101, "its screen is on the glass");
+        assert_eq!(set.current_title().as_deref(), Some("tmux -CC # @prime"));
+    }
+
+    #[test]
+    fn a_carrier_reads_its_attachment_then_why_it_ended_then_its_own_title() {
+        let mut set = channels();
+        set.set_title(0, 1, "~/src");
+        let bank = set.attach(0, 1, "prime").unwrap();
+        assert_eq!(set.slot_title(0, 1).as_deref(), Some("tmux -CC # @prime"));
+        set.collapse_bank(bank, Some("server exited unexpectedly"));
+        assert_eq!(
+            set.slot_title(0, 1).as_deref(),
+            Some("tmux -CC ended: server exited unexpectedly")
+        );
+        assert_eq!(set.rows()[0].title, "~/src", "the session's title is kept under it");
+
+        // A detach says nothing, and takes an older ending's words away.
+        let again = set.attach(0, 1, "prime").unwrap();
+        set.collapse_bank(again, None);
+        assert_eq!(set.slot_title(0, 1).as_deref(), Some("~/src"));
     }
 
     #[test]
@@ -1375,7 +1411,7 @@ mod tests {
         open(&mut set, 0, 5, 55);
         let bank = set.attach(0, 5, "prime").unwrap();
         window(&mut set, bank, 1, "vim", 1);
-        assert_eq!(set.collapse_bank(bank), Some((0, 5)));
+        assert_eq!(set.collapse_bank(bank, None), Some((0, 5)));
         assert_eq!(set.on_air(), (0, 5));
         assert_eq!(set.current().unwrap().session, 55);
         assert!(!set.is_carrier(0, 5));
@@ -1395,7 +1431,7 @@ mod tests {
         assert_eq!(set.on_air(), (tmux, 1));
         assert_eq!(set.first_free(ssh), 3, "the carrier still stands");
         window(&mut set, tmux, 1, "vim", 1);
-        assert_eq!(set.collapse_bank(tmux), Some((ssh, 2)));
+        assert_eq!(set.collapse_bank(tmux, None), Some((ssh, 2)));
         assert_eq!(set.on_air(), (ssh, 2));
         assert_eq!(set.current().unwrap().session, 501);
         assert_eq!(set.first_free(ssh), 3);
@@ -1424,7 +1460,7 @@ mod tests {
     }
 
     #[test]
-    fn a_carrier_is_neither_selected_stored_onto_nor_closed() {
+    fn a_carrier_takes_the_air_but_is_neither_stored_onto_nor_closed() {
         let mut set = channels();
         open(&mut set, 0, 2, 22);
         let bank = set.attach(0, 1, "prime").unwrap();
@@ -1432,14 +1468,15 @@ mod tests {
         set.select_channel(bank, 1);
         // A store never crosses banks.
         assert!(!set.move_current_to(0, 4));
-        assert!(!set.select_channel(0, 1));
-        assert_eq!(set.on_air(), (bank, 1));
+        assert!(set.select_channel(0, 1));
+        assert_eq!(set.on_air(), (0, 1));
+        assert!(!set.move_current_to(0, 4), "the attachment's pair stays put");
         set.select_channel(0, 2);
         assert!(!set.can_store(0, 1));
         assert_eq!(set.close_channel(0, 1), Close::Nothing);
-        // The cycle steps over it.
+        // The cycle stops on it like any row.
         set.cycle_open(1);
-        assert_eq!(set.on_air(), (0, 2));
+        assert_eq!(set.on_air(), (0, 1));
     }
 
     #[test]
@@ -1467,7 +1504,7 @@ mod tests {
         // The air is on an attachment, but the pager has stepped back to home:
         // the new channel is a PTY shell, not a tmux window, beside the carrier.
         assert_eq!(set.new_channel(0, || Some(7)), None);
-        assert_eq!(set.slot_title(0, 2), Some(""));
+        assert_eq!(set.slot_title(0, 2).as_deref(), Some(""));
         // Viewing the attachment, the same key asks its gateway instead.
         assert_eq!(set.new_channel(bank, || Some(8)), Some(bank));
         assert!(matches!(
@@ -1491,7 +1528,7 @@ mod tests {
         assert!(set.rows().iter().all(|r| r.bank == 0));
         assert_eq!(set.bank_identity(bank).as_deref(), Some("tmux -CC # @prime"));
         assert!(window(&mut set, bank, 1, "vim", 1));
-        assert_eq!(set.slot_title(bank, 1), Some("vim"));
+        assert_eq!(set.slot_title(bank, 1).as_deref(), Some("vim"));
     }
 
     #[test]
@@ -1501,7 +1538,7 @@ mod tests {
         let bank = set.attach_found("prime");
         window(&mut set, bank, 1, "vim", 1);
         set.select_channel(bank, 1);
-        assert_eq!(set.collapse_bank(bank), None, "no carrier stood for it");
+        assert_eq!(set.collapse_bank(bank, None), None, "no carrier stood for it");
         assert_eq!(set.banks().len(), 1);
         assert_eq!(set.len(), 2, "home kept its own rows and gained none");
         assert_eq!(
@@ -1519,7 +1556,7 @@ mod tests {
         window(&mut set, bank, 1, "vim", 1);
         // Home's one channel is the last channel, whatever stands beside it.
         assert_eq!(set.close_channel(0, 1), Close::CloseWindow);
-        assert_eq!(set.collapse_bank(bank), None);
+        assert_eq!(set.collapse_bank(bank, None), None);
         assert_eq!(set.banks().len(), 1);
         assert_eq!(set.len(), 1);
     }

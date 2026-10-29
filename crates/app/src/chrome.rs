@@ -1078,10 +1078,10 @@ pub struct Entry<'a> {
 /// The badge stack a frame carries, and the atlas it is struck from.
 ///
 /// Slot 0 is the size overlay's own position and everything below it stacks
-/// beneath that: the two things this appliance has to say -- the grid's new
-/// size and a write queue shedding (`crate::overlay::Notice`) -- are
-/// independent and can be true at the same moment, so stacking them is what
-/// keeps the second from being invisible whenever the first is up.
+/// beneath that: what this appliance has to say -- the grid's new size, a
+/// write queue shedding (`crate::overlay::Notice`), a carrier's plate -- is
+/// independent and can be true at the same moment, so stacking is what keeps
+/// one from being invisible whenever another is up.
 pub struct Badges<'a> {
     pub atlas: &'a GlyphAtlas,
     /// The atlas's integer magnification, `term::render`'s ruler.

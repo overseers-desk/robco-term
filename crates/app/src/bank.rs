@@ -179,12 +179,10 @@ impl BankPager {
                     channel,
                     label,
                     numeral: StripRow::numeral_text(label),
-                    title: title.unwrap_or_default().to_string(),
                     open: title.is_some(),
-                    // The brightness rule has one home: `chassis::strip`. A
-                    // carrier is the one window it never lights.
-                    bright: !channels.is_carrier(view.bank, channel)
-                        && chassis::strip::bright(current, indicator),
+                    title: title.map(String::from).unwrap_or_default(),
+                    // The brightness rule has one home: `chassis::strip`.
+                    bright: chassis::strip::bright(current, indicator),
                     current,
                     ghost: false,
                     marquee: 0,
@@ -339,18 +337,15 @@ mod tests {
     }
 
     #[test]
-    fn the_other_two_laws_drive_every_open_window_but_a_carrier_at_full() {
+    fn the_other_two_laws_drive_every_open_window_at_full_a_carrier_included() {
         let mut set = model();
         set.open_channel(0, 2, || Some(2));
+        set.attach(0, 1, "prime");
         let bank = pager(4, &set);
         for law in [ChannelIndicator::Pointer, ChannelIndicator::Switch] {
             let strips = bank.strips(&set, law);
             assert!(strips.rows.iter().all(|r| r.bright), "{law:?}");
-        }
-        set.attach(0, 1, "prime");
-        for law in [ChannelIndicator::Pointer, ChannelIndicator::Switch] {
-            let strips = bank.strips(&set, law);
-            assert!(!strips.rows[0].bright && strips.rows[1].bright, "{law:?}");
+            assert_eq!(strips.rows[0].title, "tmux -CC # @prime", "{law:?}");
         }
     }
 
@@ -412,7 +407,7 @@ mod tests {
         // A managed bank's band costs its page a row; home carries none.
         assert_eq!(bank.strips(&set, ChannelIndicator::Glow).band, set.bank_identity(attachment));
         assert_eq!(bank.view(&set).rows_on_page, 2);
-        set.collapse_bank(attachment);
+        set.collapse_bank(attachment, None);
         assert!(bank.refresh(&set), "the band changed under the numerals");
     }
 

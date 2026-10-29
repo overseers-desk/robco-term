@@ -11,8 +11,8 @@
 //! peeling the envelope, the codec, the gateway, and `app::channels`.
 //!
 //! Phases 8 to 11 are the interaction layer's, and they are the same shape one
-//! level up: what the user does with the attachment (the carrier refusing the
-//! air, a special key on its way to a pane, a pane channel's close) asserted
+//! level up: what the user does with the attachment (the carrier on the air,
+//! a special key on its way to a pane, a pane channel's close) asserted
 //! against what tmux and the model then hold.
 //!
 //! Phase 7 is the killed-client re-attach reproduction: kill the whole appliance (not
@@ -424,7 +424,7 @@ fn phase_2_new_windows_arrive_volunteered_stand_back_and_asked_for_take_the_air(
     // A window somebody else opens lines up without taking the air.
     server.run(&["new-window", "-t", "one", "-n", "fresh"]);
     pump_until(&mut surface, "the volunteered window's channel", |s| {
-        s.channels().slot_title(bank, 2) == Some("fresh")
+        s.channels().slot_title(bank, 2).as_deref() == Some("fresh")
     });
     assert_eq!(surface.channels().current_channel(), 1, "the air held");
 
@@ -451,7 +451,7 @@ fn phase_3_a_rename_lands_unescaped_in_the_bank() {
     // `a\\b` a verbatim read would show.
     server.run_bytes(&[b"rename-window", b"-t", window.as_bytes(), b"a\\b"]);
     pump_until(&mut surface, "the unescaped rename", |s| {
-        s.channels().slot_title(bank, 1) == Some(r"a\b")
+        s.channels().slot_title(bank, 1).as_deref() == Some(r"a\b")
     });
 }
 
@@ -617,20 +617,20 @@ fn phase_7_issue_4_reattach_after_appliance_death_restores_every_window() {
     }
     // And they are the right channels: names as the server holds them.
     pump_until(&mut second, "the restored titles", |s| {
-        s.channels().slot_title(bank, 2) == Some("second")
-            && s.channels().slot_title(bank, 3) == Some("third")
+        s.channels().slot_title(bank, 2).as_deref() == Some("second")
+            && s.channels().slot_title(bank, 3).as_deref() == Some("third")
     });
     assert_eq!(second.channels().on_air(), (bank, 1));
 }
 
 // ---- the interaction phases ----------------------------------------------
 
-/// The carrier's pty is the protocol's wire, so it never takes the air: a
-/// press on its strip leaves the air where it was, and the codec, which pairs
-/// every reply to a command it sent, is still in step afterwards. The way out
-/// is `Alt+Shift+D`.
+/// The carrier takes the air like any row, but its pty is the protocol's
+/// wire: a key typed there goes nowhere, and the codec, which pairs every
+/// reply to a command it sent, is still in step afterwards. The way out is
+/// `Alt+Shift+D`, from the attachment's page or the carrier's own.
 #[test]
-fn phase_8_the_carrier_refuses_the_air_and_alt_shift_d_detaches() {
+fn phase_8_the_carrier_takes_the_air_and_alt_shift_d_on_it_detaches() {
     if !have_tmux() {
         return;
     }
@@ -638,10 +638,26 @@ fn phase_8_the_carrier_refuses_the_air_and_alt_shift_d_detaches() {
     server.run(&["new-window", "-t", "one", "-n", "logs"]);
     let mut surface = surface_with_bank();
     let bank = attach(&mut surface, &server);
+
+    // Paging home finds the carrier, its strip and the plate over its own
+    // screen naming the attachment and the key that lets it go.
     press(&mut surface, Key::Named(NamedKey::PageUp), None, CHORD);
-    let home = surface.channels().on_air();
-    surface.press_strip(1);
-    assert_eq!(surface.channels().on_air(), home, "the carrier took no air");
+    assert_eq!(surface.channels().on_air(), (0, 1));
+    let identity = surface.channels().bank_identity(bank).unwrap();
+    assert_eq!(surface.channels().current_title().as_deref(), Some(identity.as_str()));
+    assert_eq!(surface.bank_strips().rows[0].title, identity);
+    assert_eq!(
+        surface.carrier_plate(),
+        vec![identity.clone(), app::window::BAND_DETACH.to_string()]
+    );
+    assert_carrier_clean(&surface);
+
+    // What is typed there reaches nothing: a line on tmux's stdin would be a
+    // command, and its answer would put every reply below against the wrong
+    // question.
+    press(&mut surface, Key::Character("x".into()), Some("x"), ModifiersState::empty());
+    press(&mut surface, Key::Named(NamedKey::Enter), Some("\r"), ModifiersState::empty());
+    assert_carrier_clean(&surface);
 
     // A window asked for walks the whole pairing chain (new-window, the
     // %window-add re-listing, the capture and the cursor), and the answer has
@@ -656,11 +672,15 @@ fn phase_8_the_carrier_refuses_the_air_and_alt_shift_d_detaches() {
         row_of(s, bank, &fresh).is_some_and(|r| !r.title.is_empty())
     });
 
+    // The same key from the carrier's own page lets the attachment go.
+    press(&mut surface, Key::Named(NamedKey::PageUp), None, CHORD);
+    assert_eq!(surface.channels().on_air(), (0, 1));
     detach_key(&mut surface);
     pump_until(&mut surface, "the key to detach the bank", |s| {
         s.channels().banks().len() == 1
     });
     assert_eq!(surface.channels().on_air(), (0, 1), "the carrier, live again");
+    assert!(surface.carrier_plate().is_empty(), "a detach asked for says nothing");
     assert_eq!(server.clients(), 0, "tmux let the client go");
     assert!(!server.windows().is_empty(), "and kept the session");
 }
@@ -1107,8 +1127,8 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
     server.run(&["new-window", "-t", "one", "-n", "second"]);
     let mut surface = surface_with_bank();
 
-    // A second home channel, because the one the attach is typed into
-    // carries the wire and takes no air.
+    // A second home channel, which the attach is typed into and which then
+    // carries the wire.
     surface.new_channel();
     assert_eq!(surface.channels().on_air(), (0, 2));
     let bank = attach(&mut surface, &server);
@@ -1130,10 +1150,10 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
     assert_eq!(surface.notice().text(), app::window::BAND_DETACH);
     assert_eq!(surface.channels().on_air(), (bank, 2));
 
-    // Page home. Home was left on slot 2, which carries the wire, so the air
-    // falls to the first row home still has.
+    // Page home. Home was left on slot 2, the carrier, and the air comes
+    // back to it like to any row.
     press(&mut surface, Key::Named(NamedKey::PageUp), None, CHORD);
-    assert_eq!(surface.channels().on_air(), (0, 1));
+    assert_eq!(surface.channels().on_air(), (0, 2));
     assert_eq!(surface.notice().text(), app::window::BAND_DETACH, "home has no card");
 
     // Home takes a channel of its own, and that is where it is left.
@@ -1162,11 +1182,11 @@ fn phase_17_paging_across_banks_brings_each_one_back_to_the_channel_it_was_left_
 }
 
 /// The first-run path: the only channel there is types `tmux -CC` and carries
-/// the wire. Paging home finds nothing but the carrier, so the air lands on the
-/// slot beside it and tunes to no signal; the new-channel key there takes 02;
-/// and the detach lands on the carrier, live again.
+/// the wire. Paging home finds the carrier and puts it on the air; the
+/// new-channel key there takes 02; and the detach lands on the carrier, live
+/// again.
 #[test]
-fn phase_18_paging_home_off_a_first_channels_attach_tunes_the_glass_to_no_signal() {
+fn phase_18_paging_home_off_a_first_channels_attach_finds_the_carrier() {
     if !have_tmux() {
         return;
     }
@@ -1174,13 +1194,11 @@ fn phase_18_paging_home_off_a_first_channels_attach_tunes_the_glass_to_no_signal
     let mut surface = surface_with_bank();
     attach(&mut surface, &server);
     press(&mut surface, Key::Named(NamedKey::PageUp), None, CHORD);
-    assert_eq!(surface.channels().on_air(), (0, 2), "home takes the air");
-    assert!(surface.channels().current().is_none(), "no row on it");
-    assert_eq!(surface.no_signal(), Some(app::window::NO_SIGNAL));
+    assert_eq!(surface.channels().on_air(), (0, 1), "home takes the air");
+    assert!(surface.no_signal().is_none(), "the carrier's own screen is on the glass");
 
     surface.new_channel();
     assert_eq!(surface.channels().on_air(), (0, 2));
-    assert!(surface.no_signal().is_none(), "a lit row ends the message");
 
     press(&mut surface, Key::Named(NamedKey::PageDown), None, CHORD);
     detach_key(&mut surface);
@@ -1447,4 +1465,36 @@ fn phase_22_a_reattach_finds_the_bank_as_it_was_arranged_gap_included() {
     let bank = attach(&mut surface, &server);
     assert_eq!(arranged(&surface, bank), vec![Some(4), Some(1), Some(2)]);
     assert_eq!(surface.channels().slot_title(bank, 3), None, "the separator stays dark");
+}
+
+/// An end the user did not ask for stays said on the carrier: tmux 3.5a's
+/// `%exit` to a client whose server was killed carries no reason, and the
+/// strip and the plate say so until a key typed there reaches the shell.
+#[test]
+fn phase_23_a_killed_server_leaves_its_end_on_the_carrier_until_a_key() {
+    if !have_tmux() {
+        return;
+    }
+    let server = Server::start();
+    let mut surface = surface_with_bank();
+    attach(&mut surface, &server);
+    server.run(&["kill-server"]);
+    pump_until(&mut surface, "the bank to collapse", |s| {
+        s.channels().banks().len() == 1
+    });
+    let ended = "tmux -CC ended: no reason given";
+    assert_eq!(surface.channels().on_air(), (0, 1), "the air on the carrier");
+    assert_eq!(surface.channels().current_title().as_deref(), Some(ended));
+    assert_eq!(surface.carrier_plate(), vec![ended.to_string()]);
+    assert_carrier_clean(&surface);
+
+    for c in "echo back\r".chars() {
+        let text = c.to_string();
+        press(&mut surface, Key::Character(text.as_str().into()), Some(&text), ModifiersState::empty());
+    }
+    pump_until(&mut surface, "the shell to answer", |s| {
+        s.viewport_text().iter().any(|line| line.trim() == "back")
+    });
+    assert!(surface.carrier_plate().is_empty(), "read, and gone");
+    assert_ne!(surface.channels().current_title().as_deref(), Some(ended));
 }

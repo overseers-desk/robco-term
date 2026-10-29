@@ -98,7 +98,7 @@ impl TerminalSurface {
         if self.start_gateway(raised) {
             log::info!("tmux: attached; bank {raised} raised over channel {channel}");
         } else {
-            self.channels.collapse_bank(raised);
+            self.channels.collapse_bank(raised, None);
         }
     }
 
@@ -134,7 +134,7 @@ impl TerminalSurface {
         }
         for bank in opened {
             if !self.start_gateway(bank) {
-                self.collapse_bank(bank, false);
+                self.collapse_bank(bank, false, None);
             }
         }
         for (bank, started) in dead {
@@ -142,7 +142,7 @@ impl TerminalSurface {
                 log::warn!("tmux: bank {bank}'s client died before the protocol opened");
                 self.forget_bank(bank, true);
             }
-            self.collapse_bank(bank, true);
+            self.collapse_bank(bank, true, None);
         }
     }
 
@@ -397,7 +397,10 @@ impl TerminalSurface {
                     server_pid,
                     sessions,
                 } => self.bank_sessions(bank, attached, socket, server_pid, sessions),
-                GatewayEvent::Detached { lost_protocol } => collapse = Some(lost_protocol),
+                GatewayEvent::Detached {
+                    lost_protocol,
+                    reason,
+                } => collapse = Some((lost_protocol, reason)),
             }
         }
 
@@ -405,8 +408,8 @@ impl TerminalSurface {
             self.channels.settle_on_open_row(bank);
         }
 
-        if let Some(lost_protocol) = collapse {
-            self.collapse_bank(bank, lost_protocol);
+        if let Some((lost_protocol, reason)) = collapse {
+            self.collapse_bank(bank, lost_protocol, reason.as_deref());
         } else {
             // Wherever the bank's windows stand now, a store or a landing
             // since the last pump included, tmux holds it for the next attach.
@@ -425,15 +428,18 @@ impl TerminalSurface {
     /// Detach or a dead wire: a protocol lost without an `ST` first forces
     /// the wire's parser out of the envelope no one will ever close
     /// (`term::Session::leave_control_mode`), then the model collapses the
-    /// bank (`channels::Channels::collapse_bank`).
-    pub(super) fn collapse_bank(&mut self, bank: BankId, lost_protocol: bool) {
+    /// bank (`channels::Channels::collapse_bank`), the carrier keeping
+    /// `reason` for the user. The glass is owed a frame: the strip, and the
+    /// carrier's plate where the air stands on it, now say how it ended.
+    pub(super) fn collapse_bank(&mut self, bank: BankId, lost_protocol: bool, reason: Option<&str>) {
         if lost_protocol {
             if let Some(wire) = self.wire_mut(bank) {
                 wire.leave_control_mode();
             }
         }
-        self.channels.collapse_bank(bank);
+        self.channels.collapse_bank(bank, reason);
         self.forget_bank(bank, false);
+        self.output_pending = true;
         log::info!("tmux: bank {bank} collapsed (protocol lost: {lost_protocol})");
     }
 

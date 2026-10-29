@@ -1078,7 +1078,7 @@ impl TerminalSurface {
         for (bank, channel) in died {
             log::info!("channel {channel} on bank {bank} exited");
             if let Some(carried) = self.channels.carried_bank(bank, channel) {
-                self.collapse_bank(carried, true);
+                self.collapse_bank(carried, true, None);
             }
             if self.channels.session_died(bank, channel) == Close::CloseWindow {
                 self.eof = true;
@@ -1329,6 +1329,32 @@ impl TerminalSurface {
     /// glass. The frame draws what this says, so a test with no device can ask.
     pub fn no_signal(&self) -> Option<[&'static str; 2]> {
         self.channels.session().is_none().then_some(NO_SIGNAL)
+    }
+
+    /// What the glass holds over a carrier on the air: the attachment it
+    /// carries and the key that lets it go, or why the one it carried ended.
+    /// Badges below the stack's own, held while the air stays and with no
+    /// timer, never cells: a copy of the carrier's screen still yields only
+    /// what its session sent (INVARIANTS.md). Each line is cut to the grid's
+    /// width, which is what the glass can show of it.
+    pub fn carrier_plate(&self) -> Vec<String> {
+        let (bank, channel) = self.channels.on_air();
+        let ended = self.channels.current().is_some_and(|r| r.attachment_ended.is_some());
+        let mut lines = Vec::new();
+        if let Some(title) = self.channels.current_title() {
+            if self.channels.is_carrier(bank, channel) {
+                lines = vec![title.into_owned(), BAND_DETACH.to_string()];
+            } else if ended {
+                lines = vec![title.into_owned()];
+            }
+        }
+        let columns = self.viewport.term_size().cols();
+        for line in &mut lines {
+            if let Some((cut, _)) = line.char_indices().nth(columns) {
+                line.truncate(cut);
+            }
+        }
+        lines
     }
 
     /// The channel state itself, for a test or for whoever mounts the bank.
@@ -1757,6 +1783,7 @@ impl TerminalSurface {
         // shows no highlight at all.
         let top_line = self.top_line();
         let no_signal = self.no_signal();
+        let plate = self.carrier_plate();
         let marked = self
             .marked_range()
             .map(|range| Marked { range, top_line });
@@ -1993,7 +2020,8 @@ impl TerminalSurface {
         // that shed, a look that was saved. This is not gated by
         // `showTerminalSize` either -- the setting is about the resize
         // badge, and hiding a loss behind a cosmetic switch would be a
-        // second way to lose the news.
+        // second way to lose the news. Under both, held, the carrier's plate
+        // (`Self::carrier_plate`).
         frame.mark(Mark::ChromeStart);
         let window = (bank + well.0, well.1);
         let badge_opacity = if glass.applied.general.show_terminal_size {
@@ -2001,7 +2029,7 @@ impl TerminalSurface {
         } else {
             0.0
         };
-        let entries = [
+        let mut entries = vec![
             crate::chrome::Entry {
                 text: &self.size_badge.0,
                 opacity: badge_opacity,
@@ -2011,6 +2039,10 @@ impl TerminalSurface {
                 opacity: self.notice.opacity_at(now),
             },
         ];
+        entries.extend(plate.iter().map(|text| crate::chrome::Entry {
+            text,
+            opacity: crate::overlay::NOTICE_OPACITY,
+        }));
         glass.chrome.render(
             &gpu.device,
             &gpu.queue,
@@ -2470,7 +2502,7 @@ impl Surface for TerminalSurface {
     /// back to the application's name, which the shell already holds as its
     /// identity.
     fn title(&self) -> Option<String> {
-        self.channels.current_title().map(str::to_string)
+        self.channels.current_title().map(String::from)
     }
 
     /// The release of the chord modifier commits whatever digits are
