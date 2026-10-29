@@ -1,3 +1,24 @@
+robco-term (0.3.5) unstable; urgency=medium
+
+  * A key the terminal cannot answer raises a card saying why: a shell
+    that will not start, an SSH channel on a connection that is over, a
+    tmux window with no free slot, a link with no handler, a setting that
+    could not be saved, a pty that took no input.
+  * An SSH channel whose connection drops keeps its row and the screen it
+    last held, with `connection lost` beneath it, until the user closes
+    it. A tmux -CC attachment it carried ends with the link. A remote exit
+    and a hang-up the user asked for still take the row with them.
+  * The channel a tmux -CC attachment was typed in takes the air like any
+    other: its strip reads the attachment, a plate over its screen names
+    the key that detaches, and once the attachment ends they say why.
+  * A link handler that exits badly is answered on the glass within a
+    frame or two.
+  * The settings window's Font and Bank font rows are menus that tear off,
+    offering the faces the terminal ships and, below a separator, the
+    installed ones while the box offering them is ticked.
+
+ -- Weiwu Zhang <a@colourful.land>  Thu, 29 Oct 2026 23:02:22 +1000
+
 robco-term (0.3.4) unstable; urgency=medium
 
   * A tmux -CC bank comes back as it was arranged. The slot each window
