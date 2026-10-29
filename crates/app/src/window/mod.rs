@@ -299,6 +299,15 @@ fn spawn(config: &SessionConfig, size: term::TermSize) -> Option<AppSession> {
     }
 }
 
+/// [`spawn`] for a key's answer: a refusal is noted in `refused` for the
+/// caller to say on the glass ([`NO_SHELL`]) once the model has let go of
+/// the closure that asked.
+fn spawn_or_note(config: &SessionConfig, size: term::TermSize, refused: &mut bool) -> Option<AppSession> {
+    let session = spawn(config, size);
+    *refused |= session.is_none();
+    session
+}
+
 /// The sizing knobs, as this window's settings and monitor set them.
 fn sizing_request(cfg: &Config, scale_factor: f64) -> SizingRequest {
     SizingRequest {
@@ -1093,6 +1102,10 @@ impl TerminalSurface {
         // Then, and only then, what the connections are asking: the wire
         // events above carry the lines that explain the questions below.
         self.pump_asks();
+        for why in self.opener.reap() {
+            self.notice.raise(why, Instant::now());
+            self.output_pending = true;
+        }
         // A pane row's own `pump` above read nothing and could not: its bytes
         // arrive off the gateway's wire, drained here, after the loop that
         // counted. Counted only there, a tmux window on the air never asked for

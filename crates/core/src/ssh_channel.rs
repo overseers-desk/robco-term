@@ -78,9 +78,10 @@ pub struct SshChannel<T: DcsTap> {
     /// A remote byte has arrived: the connection lived. What `Eof` means
     /// depends on it.
     lived: bool,
-    /// The transport spoke after the connection lived: the only word it has
-    /// then is the connection's loss, and it means the `Eof` behind it ends
-    /// the wire and not the row.
+    /// The transport spoke after the connection lived. Once a channel has
+    /// carried a byte, `connection lost` is the one notice the connection
+    /// thread sends it, so a notice then means the `Eof` behind it ends the
+    /// wire and not the row.
     lost: bool,
     /// The wire's `Eof` has arrived; nothing more will.
     ended: bool,
@@ -128,10 +129,9 @@ impl<T: DcsTap> SshChannel<T> {
     /// whose connection never lived, or went under it, does not: the row
     /// stays, wearing the transport's refusal or `connection lost`, with
     /// whatever its screen last held ([`Self::lost`]). A shell that fails
-    /// to spawn never takes a slot; a
-    /// connection that fails or drops already has one, and that slot is the
-    /// only place its end is readable. Closing it is the user's, once they
-    /// have read why it is dead.
+    /// to spawn never takes a slot; a connection that fails or drops already
+    /// has one, and that slot is the only place its end is readable. Closing
+    /// it is the user's, once they have read why it is dead.
     pub fn pump(&mut self) -> Pumped {
         let mut out = Pumped::default();
         if self.ended {

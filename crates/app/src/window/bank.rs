@@ -20,7 +20,7 @@ use std::time::Instant;
 use crate::channels::{BankId, Close, Manager};
 use crate::chord::Chord;
 
-use super::{spawn, TerminalSurface};
+use super::TerminalSurface;
 
 impl TerminalSurface {
     /// `Ctrl+Shift+T`. A new channel is another of whatever the bank on view
@@ -57,12 +57,9 @@ impl TerminalSurface {
         }
         let (config, size) = (self.session_now(), self.viewport.term_size());
         let mut refused = false;
-        let asked = self.channels.new_channel(view, || {
-            spawn(&config, size).or_else(|| {
-                refused = true;
-                None
-            })
-        });
+        let asked = self
+            .channels
+            .new_channel(view, || super::spawn_or_note(&config, size, &mut refused));
         if let Some(bank) = asked {
             self.send_window_request(bank);
         }
@@ -121,11 +118,11 @@ impl TerminalSurface {
 
     /// `Alt+Shift+D`: the bank on view lets go of what it runs on. A tmux
     /// attachment detaches, tmux keeping the session; an SSH bank's record
-    /// goes, and the dropped link is the disconnect. On a carrier's own
-    /// page the attachment it carries is the bank meant, not the bank it
-    /// stands on, so the key on a carrier over SSH detaches tmux and leaves
-    /// the link up. Declines on the home bank, so the key reaches the
-    /// program there.
+    /// goes, and the dropped link is the disconnect. With a carrier on the
+    /// air and its own bank in view, the attachment it carries is the bank
+    /// meant, not the bank it stands on, so the key on a carrier over SSH
+    /// detaches tmux and leaves the link up. Declines on the home bank, so
+    /// the key reaches the program there.
     pub fn detach_bank(&mut self) -> bool {
         let (air, channel) = self.channels.on_air();
         let view = match self.pager.view(&self.channels).bank {

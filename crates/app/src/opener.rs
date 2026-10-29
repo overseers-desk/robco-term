@@ -8,8 +8,9 @@
 //!
 //! One [`Opener`] per window, on the [`crate::settings::SettingsApp`] model:
 //! the children it started are held until the next request reaps them, so a
-//! hundred links opened over a week leave no zombie behind, and a failure to
-//! start is one line in the log rather than a notice on the glass.
+//! hundred links opened over a week leave no zombie behind. A failure to
+//! start, and a handler that exits badly afterwards, are answered on the
+//! glass by the caller, with the detail in the log.
 //!
 //! A headless surface gets the recording form, which keeps the last link it
 //! was handed and starts nothing: what the pointer tests read back.
@@ -78,14 +79,19 @@ impl Opener {
         Ok(())
     }
 
-    /// Collect the handlers that have exited. `xdg-open` and `open` return
-    /// as soon as the browser has the link, so this is nearly always all of
-    /// them, and a handler still running is left to finish.
-    fn reap(&mut self) {
+    /// Collect the handlers that have exited, answering what the ones that
+    /// exited badly said, for the glass. `xdg-open` and `open` return as
+    /// soon as the browser has the link, so this is nearly always all of
+    /// them, and a handler still running is left to finish. The surface
+    /// calls it from its pump, so a handler that fails after it was started
+    /// is answered within a frame or two of failing.
+    pub fn reap(&mut self) -> Vec<String> {
+        let mut failed = Vec::new();
         self.children.retain_mut(|child| match child.try_wait() {
             Ok(Some(status)) => {
                 if !status.success() {
                     log::warn!("the link handler exited with {status}");
+                    failed.push(format!("the link handler exited with {status}"));
                 }
                 false
             }
@@ -95,6 +101,7 @@ impl Opener {
                 true
             }
         });
+        failed
     }
 }
 

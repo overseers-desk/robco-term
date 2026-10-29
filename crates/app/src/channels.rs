@@ -7,8 +7,8 @@
 //! channels multiplex over the one wire. An attachment's wire is the pty of
 //! the channel `tmux -CC` was typed in, its carrier, which stays on its own
 //! bank and takes the air like any row, though not a key, while attached;
-//! its strip reads the attachment it carries, and once that ends, why,
-//! until the user types there (`Row::attachment_ended`); the windows fill
+//! its strip reads the attachment, then why it ended (`Row::attachment_ended`);
+//! the windows fill
 //! the attachment's bank from slot 1, each on the slot tmux holds for it
 //! where that is free (`tmux_cc::command::CHANNEL_OPTION`). Each tmux session gets a bank of its
 //! own, and so does each SSH connection. Within a bank a slot whose session has exited goes dark and stays dark: no

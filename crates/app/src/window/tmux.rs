@@ -94,6 +94,7 @@ impl TerminalSurface {
         let Some(raised) = self.channels.attach(bank, channel, "") else {
             log::warn!("control mode detected on a slot that cannot attach ({bank},{channel})");
             self.notice.raise("tmux -CC cannot attach from here", Instant::now());
+            // No key asked for the frame that shows the card: a pump did.
             self.output_pending = true;
             return;
         };
@@ -334,6 +335,7 @@ impl TerminalSurface {
                         // it.
                         log::warn!("tmux: no slot for window {window} on bank {bank}");
                         self.notice.raise(format!("no free slot for window {name}"), Instant::now());
+                        // No key asked for the frame that shows the card: a pump did.
                         self.output_pending = true;
                     }
                 }

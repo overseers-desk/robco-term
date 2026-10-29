@@ -24,7 +24,7 @@ use winit::event::MouseButton;
 
 use crate::shell::ShellEvent;
 
-use super::{spawn, TerminalSurface};
+use super::TerminalSurface;
 
 impl TerminalSurface {
     /// A window x in the logical pixels every chassis measure is in
@@ -280,10 +280,7 @@ impl TerminalSurface {
         let pager = self.pager.clone();
         let mut refused = false;
         pager.press(&mut self.channels, channel, || {
-            spawn(&config, size).or_else(|| {
-                refused = true;
-                None
-            })
+            super::spawn_or_note(&config, size, &mut refused)
         });
         if refused {
             self.notice.raise(super::NO_SHELL, Instant::now());

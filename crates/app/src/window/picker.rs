@@ -18,7 +18,7 @@ use term::{ChannelSession, TmuxPane};
 use crate::channels::Close;
 use crate::ssh::SshRequest;
 
-use super::{spawn, TerminalSurface};
+use super::TerminalSurface;
 
 impl TerminalSurface {
     /// Put a shed write queue on the glass.
@@ -127,12 +127,8 @@ impl TerminalSurface {
                 // the page is never closing the last channel.
                 let (config, size) = (self.session_now(), self.viewport.term_size());
                 let mut refused = false;
-                self.channels.open_first_free(|| {
-                    spawn(&config, size).or_else(|| {
-                        refused = true;
-                        None
-                    })
-                });
+                self.channels
+                    .open_first_free(|| super::spawn_or_note(&config, size, &mut refused));
                 if refused {
                     self.notice.raise(super::NO_SHELL, Instant::now());
                 }

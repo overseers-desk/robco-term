@@ -244,7 +244,7 @@ pub struct Gateway<W: Write> {
     host: String,
     /// What an error block of tmux's own said, such as `no sessions` from an
     /// attach with no server: the reason the bare `%exit` after it lacks.
-    refused: Option<String>,
+    error_block: Option<String>,
     /// This client asked to go ([`Gateway::detach`]). tmux's `%exit` is as
     /// bare for a killed server as for a detach, so this is what tells the
     /// user's own leaving from an end that needs saying.
@@ -293,7 +293,7 @@ impl<W: Write> Gateway<W> {
             channels: HashMap::new(),
             panes: HashMap::new(),
             host: String::new(),
-            refused: None,
+            error_block: None,
             detaching: false,
             socket: String::new(),
             server_pid: 0,
@@ -632,7 +632,7 @@ impl<W: Write> Gateway<W> {
                     if block.error {
                         let said = block.text().join(" ");
                         log::warn!("tmux: {said}");
-                        self.refused = Some(said);
+                        self.error_block = Some(said);
                     }
                     log::debug!(
                         "tmux: unsolicited block {:?} of {} line(s)",
@@ -653,7 +653,7 @@ impl<W: Write> Gateway<W> {
                     log::warn!("tmux: protocol lost, foreign line: {said:?}");
                     // Often the reason itself, such as ssh's `Connection to
                     // host closed.`; a prompt at worst. Control bytes kept
-                    // out, the line being bound for a strip and a badge.
+                    // out, the line being bound for a strip and a plate.
                     let said: String = said.chars().filter(|c| !c.is_control()).collect();
                     self.teardown(true, Some(said.trim().to_string()), &mut out);
                 }
@@ -1007,10 +1007,10 @@ impl<W: Write> Gateway<W> {
                     log::warn!("tmux: %exit {reason}");
                 }
                 // A run that never attached, such as `tmux -CC ls`, ends
-                // as bare as a killed server's and is no news.
+                // as bare as a killed server's, and nothing was lost.
                 let unasked = self.opened.is_some() && !self.detaching;
                 let reason = reason
-                    .or_else(|| self.refused.take())
+                    .or_else(|| self.error_block.take())
                     .or_else(|| unasked.then(|| "no reason given".to_string()));
                 self.teardown(false, reason, out);
             }
