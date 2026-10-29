@@ -167,6 +167,8 @@ pub const SHED_TMUX: &str = "tmux input dropped";
 /// has stopped taking bytes, which is a different remedy from either of the
 /// two above.
 pub const SHED_SSH: &str = "ssh input dropped";
+/// A key asked for a shell and none could be started; the log has the why.
+pub const NO_SHELL: &str = "could not start a shell";
 
 /// What a press on a band says: the key that lets the bank go, on a tmux bank
 /// and on an SSH bank. The chord is Cmd on macOS, as for every chord key.
@@ -2076,6 +2078,7 @@ impl TerminalSurface {
         for session in self.channels.sessions_mut().chain(wires) {
             if let Err(e) = session.well_resized(size) {
                 log::error!("could not resize the pty: {e}");
+                self.notice.raise("could not resize the pty", Instant::now());
             }
         }
         // The picker's page is bytes already parsed, so a reflow leaves it
@@ -2125,6 +2128,7 @@ impl TerminalSurface {
         if let Some(session) = self.channels.session_mut() {
             if let Err(e) = session.write(bytes) {
                 log::error!("could not write to the pty: {e}");
+                self.notice.raise("could not write to the pty", Instant::now());
             }
         }
     }

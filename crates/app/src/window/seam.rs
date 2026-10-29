@@ -245,6 +245,7 @@ impl TerminalSurface {
             Scalar::Integer(i64::from(characters)),
         ) {
             log::error!("could not write general.led_characters = {characters}: {e}");
+            self.notice.raise("could not save the bank's width", Instant::now());
         }
     }
 
@@ -277,7 +278,16 @@ impl TerminalSurface {
         }
         let (config, size) = (self.session_now(), self.viewport.term_size());
         let pager = self.pager.clone();
-        pager.press(&mut self.channels, channel, || spawn(&config, size));
+        let mut refused = false;
+        pager.press(&mut self.channels, channel, || {
+            spawn(&config, size).or_else(|| {
+                refused = true;
+                None
+            })
+        });
+        if refused {
+            self.notice.raise(super::NO_SHELL, Instant::now());
+        }
         self.channel_changed();
     }
 }

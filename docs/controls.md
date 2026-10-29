@@ -59,8 +59,10 @@ A tmux or SSH bank heads each page with an unnumbered title row reading
 label, not a channel: no digit names it and it is never on the air.
 Pressing it raises a card naming the key that lets the bank go,
 `detach: Alt+Shift+D` or `disconnect: Alt+Shift+D`, and paging onto the bank
-raises a card with its identity. On the home bank `Alt`+`Shift`+`D` reaches
-the program as the escape it is.
+raises a card with its identity. A key the appliance cannot answer raises a
+card saying why, for a moment: a shell that will not start, a connection
+that is over, a tmux window with no free slot, a setting that could not be
+saved. The log on stderr has the detail.
 
 A channel's title longer than its window reads from the first letter, unless
 it ends in a path, as a shell's working directory does (`~/src/robco-term`, or

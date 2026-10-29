@@ -56,8 +56,18 @@ impl TerminalSurface {
             }
         }
         let (config, size) = (self.session_now(), self.viewport.term_size());
-        if let Some(bank) = self.channels.new_channel(view, || spawn(&config, size)) {
+        let mut refused = false;
+        let asked = self.channels.new_channel(view, || {
+            spawn(&config, size).or_else(|| {
+                refused = true;
+                None
+            })
+        });
+        if let Some(bank) = asked {
             self.send_window_request(bank);
+        }
+        if refused {
+            self.notice.raise(super::NO_SHELL, Instant::now());
         }
         self.channel_changed();
     }
@@ -83,7 +93,10 @@ impl TerminalSurface {
     fn send_window_request(&mut self, bank: BankId) {
         match self.gateway_mut(bank) {
             Some(gateway) => gateway.new_window(),
-            None => log::warn!("bank {bank} asked for a window with no gateway standing"),
+            None => {
+                log::warn!("bank {bank} asked for a window with no gateway standing");
+                self.notice.raise("no tmux client standing here", Instant::now());
+            }
         }
     }
 

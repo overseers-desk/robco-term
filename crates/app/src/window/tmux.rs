@@ -93,12 +93,13 @@ impl TerminalSurface {
         // it does.
         let Some(raised) = self.channels.attach(bank, channel, "") else {
             log::warn!("control mode detected on a slot that cannot attach ({bank},{channel})");
+            self.notice.raise("tmux -CC cannot attach from here", Instant::now());
+            self.output_pending = true;
             return;
         };
-        if self.start_gateway(raised) {
-            log::info!("tmux: attached; bank {raised} raised over channel {channel}");
-        } else {
-            self.channels.collapse_bank(raised, None);
+        match self.start_gateway(raised) {
+            Ok(()) => log::info!("tmux: attached; bank {raised} raised over channel {channel}"),
+            Err(why) => self.collapse_bank(raised, false, Some(&why)),
         }
     }
 
@@ -133,8 +134,8 @@ impl TerminalSurface {
             }
         }
         for bank in opened {
-            if !self.start_gateway(bank) {
-                self.collapse_bank(bank, false, None);
+            if let Err(why) = self.start_gateway(bank) {
+                self.collapse_bank(bank, false, Some(&why));
             }
         }
         for (bank, started) in dead {
@@ -147,24 +148,21 @@ impl TerminalSurface {
     }
 
     /// Dup a bank's wire, raise the client half, and tell every attachment
-    /// the glass's grid (the client-size law, `crate::channels`).
-    fn start_gateway(&mut self, bank: BankId) -> bool {
+    /// the glass's grid (the client-size law, `crate::channels`). A refusal
+    /// says why, for the carrier to carry.
+    fn start_gateway(&mut self, bank: BankId) -> Result<(), String> {
         let writer = self.wire_mut(bank).and_then(|wire| wire.control_writer());
-        match writer {
+        let why = match writer {
             Some(Ok(writer)) => {
                 self.banks.entry(bank).or_default().gateway = Some(Gateway::new(writer));
                 self.set_client_size();
-                true
+                return Ok(());
             }
-            Some(Err(e)) => {
-                log::error!("tmux: no wire for the attachment: {e}");
-                false
-            }
-            None => {
-                log::error!("tmux: no wire for the attachment: the bank has none");
-                false
-            }
-        }
+            Some(Err(e)) => e.to_string(),
+            None => "the bank has none".to_string(),
+        };
+        log::error!("tmux: no wire for the attachment: {why}");
+        Err(format!("no wire for the attachment: {why}"))
     }
 
     pub(super) fn is_tmux(&self, bank: BankId) -> bool {
@@ -335,6 +333,8 @@ impl TerminalSurface {
                         // channelless: tmux keeps it, but nothing here draws
                         // it.
                         log::warn!("tmux: no slot for window {window} on bank {bank}");
+                        self.notice.raise(format!("no free slot for window {name}"), Instant::now());
+                        self.output_pending = true;
                     }
                 }
                 GatewayEvent::WindowRenamed { window, name } => {

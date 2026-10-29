@@ -11,6 +11,7 @@
 //! and configure that carrier; and `settings`, the only handle in the
 //! program that writes `ssh.default`.
 
+use std::time::Instant;
 use config::toml::Scalar;
 use term::{ChannelSession, TmuxPane};
 
@@ -55,6 +56,7 @@ impl TerminalSurface {
         });
         if !opened {
             log::warn!("no free home slot for the destination picker");
+            self.notice.raise("no free slot for the picker", Instant::now());
             return;
         }
         self.picker = Some(crate::picker::Picker::new(slot));
@@ -124,7 +126,16 @@ impl TerminalSurface {
                 // The replacement stands before the page goes, so closing
                 // the page is never closing the last channel.
                 let (config, size) = (self.session_now(), self.viewport.term_size());
-                self.channels.open_first_free(|| spawn(&config, size));
+                let mut refused = false;
+                self.channels.open_first_free(|| {
+                    spawn(&config, size).or_else(|| {
+                        refused = true;
+                        None
+                    })
+                });
+                if refused {
+                    self.notice.raise(super::NO_SHELL, Instant::now());
+                }
                 self.retire_picker(slot);
                 true
             }
@@ -144,6 +155,7 @@ impl TerminalSurface {
                         row.host,
                         crate::ssh::USER_VAR
                     );
+                    self.notice.raise(format!("no user for {}", row.host), Instant::now());
                     self.picker = Some(picker);
                     return true;
                 };
@@ -189,7 +201,7 @@ impl TerminalSurface {
     /// The picker's checkbox is the only thing that calls this, and the only
     /// thing in the program that sets `ssh.default`: one surface, so there is
     /// one answer to where sessions start and one place it was given.
-    fn set_default_connection(&self, host: &str) {
+    fn set_default_connection(&mut self, host: &str) {
         let Some(settings) = self.settings.as_ref() else {
             // No handle: `--default-settings`, or a headless surface that
             // never attached one. The connection is dialled and nothing is
@@ -200,6 +212,7 @@ impl TerminalSurface {
         };
         if let Err(e) = settings.write_key("ssh.default", Scalar::String(host.to_string())) {
             log::error!("could not write ssh.default = {host:?}: {e}");
+            self.notice.raise("could not save the default", Instant::now());
         }
     }
 

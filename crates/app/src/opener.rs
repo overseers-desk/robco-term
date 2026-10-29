@@ -47,16 +47,17 @@ impl Opener {
         self.last.as_deref()
     }
 
-    /// Hand `url` to the platform's handler.
-    pub fn open(&mut self, url: &str) {
+    /// Hand `url` to the platform's handler. A refusal says why, in words
+    /// for the glass; the log has the detail.
+    pub fn open(&mut self, url: &str) -> Result<(), String> {
         self.last = Some(url.to_string());
         if !self.launches {
-            return;
+            return Ok(());
         }
         self.reap();
         let Some((program, args)) = handler(url) else {
             log::warn!("this platform has no handler to open {url} with");
-            return;
+            return Err("no handler to open links".into());
         };
         // Detached from the terminal's own input, as the settings window is:
         // a handler that inherited stdin would read the keystrokes meant for
@@ -69,8 +70,12 @@ impl Opener {
             .stdout(Stdio::null());
         match command.spawn() {
             Ok(child) => self.children.push(child),
-            Err(e) => log::warn!("could not start {program}: {e}"),
+            Err(e) => {
+                log::warn!("could not start {program}: {e}");
+                return Err(format!("could not start {program}"));
+            }
         }
+        Ok(())
     }
 
     /// Collect the handlers that have exited. `xdg-open` and `open` return
@@ -128,7 +133,7 @@ mod tests {
     fn the_recording_opener_keeps_the_link_and_starts_nothing() {
         let mut opener = Opener::recording();
         assert_eq!(opener.last_opened(), None);
-        opener.open("https://example.com/?a=1&b=2");
+        assert_eq!(opener.open("https://example.com/?a=1&b=2"), Ok(()));
         assert_eq!(opener.last_opened(), Some("https://example.com/?a=1&b=2"));
         assert!(opener.children.is_empty());
     }

@@ -438,7 +438,9 @@ impl TerminalSurface {
         if button == pointer::Button::Left {
             if let Some((pressed_at, url)) = self.link_press.take() {
                 if cell == pressed_at {
-                    self.opener.open(&url);
+                    if let Err(why) = self.opener.open(&url) {
+                        self.notice.raise(why, Instant::now());
+                    }
                 }
             }
         }

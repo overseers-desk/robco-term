@@ -118,3 +118,28 @@ fn typing_thrown_away_by_a_full_queue_says_so_on_the_glass() {
     // not leave the user staring at old news.
     assert!(!surface.notice().visible_at(now + NOTICE_HOLD + NOTICE_FADE));
 }
+
+/// A key that asks for a shell and gets none is answered on the glass, not
+/// only in the log: the card reads [`app::window::NO_SHELL`] for its hold.
+#[test]
+fn a_shell_that_cannot_start_says_so_on_the_glass() {
+    let viewport = Viewport::new(
+        COLS * CELL_W as u32,
+        ROWS * CELL_H as u32,
+        1.0,
+        CellSize::new(CELL_W as f32, CELL_H as f32),
+    );
+    let mut surface = TerminalSurface::headless(
+        &SessionConfig {
+            program: Some("/nonexistent/shell".to_string()),
+            ..SessionConfig::default()
+        },
+        viewport,
+    );
+    assert!(surface.channels().current().is_none(), "no shell came up");
+    let now = Instant::now();
+    assert!(!surface.notice().visible_at(now), "the first failure is startup's, not a key's");
+    surface.new_channel();
+    assert_eq!(surface.notice().text(), app::window::NO_SHELL);
+    assert!(surface.notice().visible_at(now));
+}

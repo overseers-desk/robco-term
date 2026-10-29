@@ -11,6 +11,7 @@
 //! and the `AskDesk` the connection asks its questions over; `viewport` and
 //! `session_config`, which size and name the remote pty.
 
+use std::time::Instant;
 use ssh_link::{Link, SshTarget};
 use term::{ChannelSession, ControlModeTap, SshChannel};
 
@@ -44,6 +45,7 @@ impl TerminalSurface {
             .and_then(|runtime| runtime.link.as_ref())
         else {
             log::warn!("bank {bank} asked for an ssh channel with no link standing");
+            self.notice.raise("no connection standing here", Instant::now());
             return;
         };
         let size = self.viewport.term_size();
@@ -53,6 +55,7 @@ impl TerminalSurface {
             Ok(handle) => handle,
             Err(over) => {
                 log::warn!("bank {bank}: {over}");
+                self.notice.raise(over, Instant::now());
                 return;
             }
         };
@@ -107,6 +110,7 @@ impl TerminalSurface {
             Ok(pair) => pair,
             Err(e) => {
                 log::error!("could not start the ssh thread for {}: {e}", req.host);
+                self.notice.raise("could not start ssh", Instant::now());
                 return;
             }
         };
